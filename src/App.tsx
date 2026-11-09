@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Compass, Download, ExternalLink, Feather, MessageCircle, Moon, Search, Send, Settings, Shuffle, Sparkles, X } from "lucide-react";
-import { chat, hasKey, saveKey, isDesktop, openSource } from "./ai";
+import { chat, hasKey, saveKey, isDesktop, openSource, seekPoems } from "./ai";
+import type { FinderPick, FinderPlan } from "./finder";
 import { chooseNext, genreLabels, genreOf, relatedPoems, searchPoems, themeLabels, type Genre, type Language, type Message, type PathKind, type Poem, type Theme } from "./domain";
 import { poems } from "./catalog";
 import { exportLibrary, getDeviceId, loadLibrary, loadSyncFolder, mergeLibraries, recordVisit, saveLibrary, saveSyncFolder, setSaved, type Library } from "./storage";
 import { readSyncSnapshots, writeSyncSnapshot } from "./sync";
 import { applyTheme, defaultTheme, loadTheme, saveTheme, themeParts, themePresets, type ThemeColors, type ThemePart } from "./theme";
 
-type Page = "today" | "search" | "notebook" | "settings";
+type Page = "today" | "search" | "notebook" | "settings" | "chat";
 const pathLabels: Record<PathKind, string> = { image: "同一意象", mood: "相近心绪", form: "同一种呼吸", contrast: "与它相反" };
 const pathKinds: PathKind[] = ["image", "mood", "form", "contrast"];
 const first = poems[0];
@@ -52,7 +53,12 @@ export default function App() {
   const [theme, setTheme] = useState<"all" | Theme>("all");
   const [visibleLimit, setVisibleLimit] = useState(24);
   const [historyLimit, setHistoryLimit] = useState(12);
-  const [readingOpen, setReadingOpen] = useState(false);
+  const [seekBusy, setSeekBusy] = useState(false);
+  const [seekError, setSeekError] = useState("");
+  const [seekPlan, setSeekPlan] = useState<FinderPlan>();
+  const [seekPicks, setSeekPicks] = useState<FinderPick[]>([]);
+  const [seekRequest, setSeekRequest] = useState("");
+  const [refineDraft, setRefineDraft] = useState("");
   const [rightsOpen, setRightsOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [noteDraft, setNoteDraft] = useState("");
@@ -139,7 +145,7 @@ export default function App() {
   function updateTheme(key: ThemePart, value: string) { setThemeColors(old => ({ ...old, [key]: value })); }
   function openPoem(poem: Poem, fromPath = false) {
     if (fromPath) setPathHistory(old => [...old, current.id].slice(-30));
-    setCurrentId(poem.id); setSelectedLine(undefined); setReadingOpen(false); setRightsOpen(false); setError(""); setPage("today");
+    setCurrentId(poem.id); setSelectedLine(undefined); setRightsOpen(false); setError(""); setPage("today");
     setLibrary(old => recordVisit(old, poem.id));
     window.scrollTo(0, 0);
   }
@@ -156,7 +162,7 @@ export default function App() {
   async function send(text = draft) {
     const content = text.trim();
     if (!content || busy) return;
-    setDraft(""); setError(""); setReadingOpen(true); setBusy(true);
+    setDraft(""); setError(""); setPage("chat"); setBusy(true);
     const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: selectedLine ? `关于「${selectedLine}」：${content}` : content, createdAt: new Date().toISOString() };
     const next = [...messages, userMessage];
     setLibrary(old => ({ ...old, conversations: { ...old.conversations, [current.id]: next } }));
@@ -165,6 +171,18 @@ export default function App() {
       setLibrary(old => ({ ...old, conversations: { ...old.conversations, [current.id]: [...(old.conversations[current.id] || next), { id: crypto.randomUUID(), role: "assistant", content: answer, createdAt: new Date().toISOString() }] } }));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
+  }
+  async function seek(request = query) {
+    const text = request.trim();
+    if (!text || seekBusy) return;
+    setQuery(text); setSeekRequest(text); setSeekError(""); setSeekPicks([]); setSeekPlan(undefined); setSeekBusy(true);
+    try {
+      if (!keyReady) throw new Error("请先在偏好与 AI 中配置 API Key");
+      const found = await seekPoems({ baseUrl: library.aiBaseUrl, model: library.aiModel, request: text, poems, seenIds: library.seenIds, onPlan: setSeekPlan });
+      setSeekPicks(found.picks); setRefineDraft("");
+      if (!found.picks.length) setSeekError("这次没有找到可靠的候选，试着放宽文体或语言条件。");
+    } catch (e) { setSeekError(e instanceof Error ? e.message : String(e)); }
+    finally { setSeekBusy(false); }
   }
   async function storeKey() {
     setSettingsNotice("");
@@ -183,9 +201,11 @@ export default function App() {
       <nav className="nav">
         <button className={page === "today" ? "active" : ""} onClick={() => setPage("today")}><Compass size={18}/> 今日偶遇 <span>01</span></button>
         <button className={page === "search" ? "active" : ""} onClick={() => setPage("search")}><Search size={18}/> 寻诗 <span>02</span></button>
+        <button className={page === "chat" ? "active" : ""} onClick={() => setPage("chat")}><MessageCircle size={18}/> 共读 <span>03</span></button>
         <button className={page === "notebook" ? "active" : ""} onClick={() => setPage("notebook")}><Bookmark size={18}/> 我的诗笺 <span>{library.savedIds.length || "03"}</span></button>
         <button className={`mobile-settings ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")} aria-label="偏好与主题"><Settings size={18}/> 偏好 <span>04</span></button>
       </nav>
+      <div className="sidebar-recent"><span>最近共读</span>{recentConversations.slice(0, 5).map(({ poem }) => <button key={poem.id} onClick={() => { openPoem(poem); setPage("chat"); }}><span className="little-line"/>{poem.title}</button>)}{recentConversations.length === 0 && <p>每一篇对话，<br/>都从一行文字开始。</p>}</div>
       <div className="sidebar-spacer"/>
       <div className="sidebar-note"><Moon size={18}/><p>有些诗不必立刻读懂。<br/>先让它在这里停一会儿。</p></div>
       <button className={`settings-link ${page === "settings" ? "active" : ""}`} onClick={() => setPage("settings")}><Settings size={17}/> 偏好与 AI</button>
@@ -194,14 +214,14 @@ export default function App() {
 
     <main className="main-content">
       {page === "today" && <>
-        <header className="topbar"><div className="eyebrow">A TEXT, A MOMENT</div><div className="top-actions"><span className="edition-pill">本地文库 · {poems.length} 篇</span><button className={`primary-soft ${saved ? "is-saved" : ""}`} onClick={toggleSaved} aria-label={saved ? "已留入诗笺，点击移除" : "留入诗笺"}>{saved ? <Check size={16}/> : <Bookmark size={16}/>}<span className="full-label">{saved ? "已留入诗笺" : "留入诗笺"}</span><span className="compact-label">{saved ? "已留" : "留诗笺"}</span></button><button className="ghost-button" onClick={() => setReadingOpen(true)}><MessageCircle size={16}/><span className="full-label">与它谈谈</span><span className="compact-label">共读</span></button><button className="ghost-button" onClick={nextPoem}><Shuffle size={16}/> {genreOf(current) === "古文" ? "再遇一篇" : "再遇一首"}</button></div></header>
+        <header className="topbar"><div className="eyebrow">A TEXT, A MOMENT</div><div className="top-actions"><span className="edition-pill">本地文库 · {poems.length} 篇</span><button className={`primary-soft ${saved ? "is-saved" : ""}`} onClick={toggleSaved} aria-label={saved ? "已留入诗笺，点击移除" : "留入诗笺"}>{saved ? <Check size={16}/> : <Bookmark size={16}/>}<span className="full-label">{saved ? "已留入诗笺" : "留入诗笺"}</span><span className="compact-label">{saved ? "已留" : "留诗笺"}</span></button><button className="ghost-button" onClick={() => setPage("chat")}><MessageCircle size={16}/><span className="full-label">与它谈谈</span><span className="compact-label">共读</span></button><button className="ghost-button" onClick={nextPoem}><Shuffle size={16}/> {genreOf(current) === "古文" ? "再遇一篇" : "再遇一首"}</button></div></header>
         <div className="reader-layout">
           <section className="reader-main">
             {pathHistory.length > 0 && <button className="text-button back-path" onClick={() => { const prev = pathHistory[pathHistory.length - 1]; setPathHistory(pathHistory.slice(0, -1)); openPoem(poems.find(p => p.id === prev) || first); }}><ArrowLeft size={15}/> 回到上一首</button>}
             <div className="chapter-label"><span className="chapter-line"/> 今日与你相遇的诗 <span className="chapter-line"/></div>
             <div className="poem-heading"><div className="meta-line">{current.language === "zh" ? genreOf(current) : "ENGLISH POETRY"} <span>·</span> {current.era} <span>·</span> {current.form}</div><h1>{current.title}</h1><p>{current.author}</p></div>
             <PoemBody poem={current} selectedLine={selectedLine} onSelect={setSelectedLine}/>
-            {selectedLine && <div className="line-hint"><Sparkles size={15}/> 已点亮「{selectedLine}」<button onClick={() => { setReadingOpen(true); setDraft("这一句可以怎样读？"); }}>谈谈这一句 <ArrowRight size={14}/></button></div>}
+            {selectedLine && <div className="line-hint"><Sparkles size={15}/> 已点亮「{selectedLine}」<button onClick={() => { setPage("chat"); setDraft("这一句可以怎样读？"); }}>谈谈这一句 <ArrowRight size={14}/></button></div>}
             <div className="source-line"><BookOpen size={14}/> 文本来源：<button onClick={() => openSource(current.sourceUrl)}>{current.sourceName} <ExternalLink size={12}/></button><button onClick={() => setRightsOpen(true)}>版权与版本说明</button></div>
           </section>
           <aside className="reader-aside"><div className="aside-kicker">沿 此 而 去</div><h2>一篇作品的岔路</h2><p className="aside-intro">选择一种关联，看看文字会把你带到哪里。</p><div className="path-tabs">{pathKinds.map(kind => <button key={kind} className={kind === pathKind ? "selected" : ""} onClick={() => setPathKind(kind)}>{pathLabels[kind]}</button>)}</div><div className="path-list">{paths.slice(0, 3).map(({ poem, reason }) => <button key={poem.id} onClick={() => openPoem(poem, true)}><span className="path-num">↗</span><span><strong>{poem.title}</strong><small>{poem.author} · {reason}</small></span><ArrowRight size={15}/></button>)}</div><div className="aside-bottom">每条路都有来处，也可以随时返回。</div></aside>
@@ -213,6 +233,9 @@ export default function App() {
         <h1 className="page-title">你想遇见怎样的文字？</h1>
         <p className="page-description">诗、词、曲、歌赋与古文，一个词、一位作者、一句记得不完整的话，都可以从这里开始。</p>
         <div className="search-box"><Search size={21}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="试试：写雨但不悲伤的短诗、诗经、王维、night..." autoFocus/>{query && <button onClick={() => setQuery("")} title="清空"><X size={17}/></button>}</div>
+        <div className="ai-seek"><div><span className="page-eyebrow">POEMA AS YOUR GUIDE</span><h2>说出一种心绪，让 AI 替你寻诗</h2><p>它先理解你的期待，再从本地文库中挑选候选，核对作品 ID 后给出具体理由。不会凭空编造诗句。</p></div><button className="primary-soft" onClick={() => void seek()} disabled={seekBusy || !query.trim()}><Sparkles size={16}/>{seekBusy ? "正在寻诗…" : "请 AI 寻诗"}</button></div>
+        <div className="seek-prompts"><span>也可以从这里开始</span>{["想读一篇写孤独，却不自怜的短诗", "找一首不太有名的宋词，带一点夜色", "想念故乡，但不想太伤感"].map(prompt => <button key={prompt} onClick={() => void seek(prompt)} disabled={seekBusy}>{prompt} <ArrowRight size={13}/></button>)}</div>
+        {(seekPlan || seekBusy || seekError || seekPicks.length > 0) && <section className="seek-result"><div className="seek-result-head"><span>AI 寻诗 · {seekRequest}</span>{seekBusy && <small>正在读懂需求并复核本地候选…</small>}</div>{seekPlan && <p>{seekPlan.interpretation}</p>}{seekError && <p className="chat-error">{seekError} <button onClick={() => setPage("settings")}>检查 AI 设置</button></p>}{seekPicks.length > 0 && <div className="results-grid">{seekPicks.map(pick => { const poem = poems.find(item => item.id === pick.id); return poem ? <PoemCard key={pick.id} poem={poem} reason={pick.reason} onOpen={() => openPoem(poem)}/> : null; })}</div>}{seekPicks.length > 0 && <div className="seek-followup"><input value={refineDraft} onChange={e => setRefineDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && refineDraft.trim()) void seek(`${seekRequest}；补充要求：${refineDraft.trim()}`); }} placeholder="还想补充什么？例如：更短一些、换成词、别太悲伤"/><button className="primary-soft" disabled={!refineDraft.trim() || seekBusy} onClick={() => void seek(`${seekRequest}；补充要求：${refineDraft.trim()}`)}>继续寻诗 <ArrowRight size={14}/></button><button className="text-button" onClick={() => void seek(`${seekRequest}；请换一批作者和作品，少一些常见名篇`)}>换一批，更小众</button></div>}</section>}
         {intent.labels.length > 0 && <div className="intent-chips"><span>已理解为</span>{intent.labels.map((label, i) => <span key={i}>{label}</span>)}{intent.residual && <span>关键词：{intent.residual}</span>}</div>}
         <div className="filters">
           <label>语言 <select value={language} onChange={e => setLanguage(e.target.value as typeof language)}><option value="all">中英皆可</option><option value="zh">中文</option><option value="en">英文</option></select><ChevronDown size={13}/></label>
@@ -232,7 +255,7 @@ export default function App() {
           {recentReads.length ? <><div className="recent-grid">{recentReads.slice(0, historyLimit).map(({ event, poem }) => <button className="recent-item" key={event.id} onClick={() => openPoem(poem)}><span>{genreOf(poem)} · {event.id.startsWith("legacy:") ? "旧版记录" : new Date(event.viewedAt).toLocaleString("zh-CN")}</span><strong>{poem.title}</strong><small>{poem.author}</small></button>)}</div>{recentReads.length > historyLimit && <button className="load-more" onClick={() => setHistoryLimit(old => old + 24)}>展开更多浏览记录</button>}</> : <div className="quiet-empty">尚无浏览记录。</div>}
         </section>
         <section className="library-section"><h2>最近共读</h2><p>每篇作品的对话分开保存，打开后可以接着谈。</p>
-          {recentConversations.length ? <div className="recent-grid">{recentConversations.map(({ poem, last }) => <button className="recent-item" key={poem.id} onClick={() => { openPoem(poem); setReadingOpen(true); }}><span>{new Date(last.createdAt).toLocaleString("zh-CN")}</span><strong>{poem.title}</strong><small>{last.content.slice(0, 70)}</small></button>)}</div> : <div className="quiet-empty">还没有共读对话。</div>}
+          {recentConversations.length ? <div className="recent-grid">{recentConversations.map(({ poem, last }) => <button className="recent-item" key={poem.id} onClick={() => { openPoem(poem); setPage("chat"); }}><span>{new Date(last.createdAt).toLocaleString("zh-CN")}</span><strong>{poem.title}</strong><small>{last.content.slice(0, 70)}</small></button>)}</div> : <div className="quiet-empty">还没有共读对话。</div>}
         </section>
         <section className="library-section"><h2>留入诗笺</h2>{savedPoems.length ? <div className="results-grid">{savedPoems.map(p => <PoemCard key={p.id} poem={p} reason={library.notes.find(n => n.poemId === p.id)?.text} onOpen={() => openPoem(p)}/>)}</div> : <div className="quiet-empty">还没有收藏。遇到喜欢的作品，就把它留在这里。</div>}</section>
         {library.notes.length > 0 && <section className="notes-section"><h2>留下的话</h2>{library.notes.map((note, i) => <div className="note-item" key={`${note.savedAt}-${i}`}><span>{poems.find(p => p.id === note.poemId)?.title}</span>{note.line && <em>「{note.line}」</em>}<p>{note.text}</p><small>{new Date(note.savedAt).toLocaleDateString("zh-CN")}</small></div>)}</section>}
@@ -244,13 +267,13 @@ export default function App() {
         <section className="setting-card"><h2>坚果云 · 多设备诗笺</h2><p>先在每台电脑安装坚果云客户端，并让同一个文件夹同步到本机。填写这台电脑上的文件夹路径后，Poema 会在其中建立 Poema/devices，定期合并各设备的记录。</p><label>本机同步文件夹<input value={syncDraft} onChange={e => setSyncDraft(e.target.value)} placeholder="例如 D:\Nutstore\我的坚果云" disabled={!isDesktop}/></label><div className="sync-actions"><button className="primary-soft" onClick={connectSync} disabled={!isDesktop || !syncDraft.trim()}>连接 / 立即同步</button>{syncFolder && <button className="ghost-button" onClick={disconnectSync}>停止同步</button>}</div><p className="setting-notice">{isDesktop ? (syncStatus || (syncFolder ? `已连接：${syncFolder}` : "尚未连接同步文件夹。")) : "浏览器预览不支持文件夹同步，请使用桌面版。"}</p><p className="sync-warning">同步文件包含明文收藏、笔记、浏览记录和共读对话；API Key 不会同步。请选择仅自己可访问的文件夹。</p></section>
         <section className="setting-card"><h2>为阅读调一盏灯</h2><p>从一套色调开始，再逐项调整页面、卡片、文字与按钮。更改即时生效，并只保存在这台设备上。</p><div className="theme-presets">{themePresets.map(preset => <button key={preset.name} className={themeParts.every(part => themeColors[part.key].toLowerCase() === preset.colors[part.key].toLowerCase()) ? "active" : ""} onClick={() => setThemeColors({ ...preset.colors })}>{preset.name}</button>)}</div><div className="theme-grid">{themeParts.map(part => <ThemeControl key={part.key} part={part} value={themeColors[part.key]} onChange={updateTheme}/>)}</div><button className="ghost-button theme-reset" onClick={() => setThemeColors({ ...defaultTheme })}>恢复默认色彩</button></section>
         <section className="setting-card"><h2>共读模型</h2><p>桌面版密钥保存到系统凭据库；浏览器预览只保留在当前会话。发送问题时会附上当前作品的原文和本篇最近的对话。</p><label>服务地址<input value={library.aiBaseUrl} onChange={e => update({ aiBaseUrl: e.target.value })} placeholder="https://api.openai.com/v1"/></label><label>模型名称<input value={library.aiModel} onChange={e => update({ aiModel: e.target.value })} placeholder="填写服务商提供的模型 ID"/></label><label>API Key <span className="key-status">{keyReady ? "已配置" : "未配置"}</span><input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={keyReady ? "输入新密钥可替换" : "输入密钥"}/></label><button className="primary-soft" onClick={storeKey}>保存密钥</button>{keyReady && <button className="clear-key" onClick={clearKey}>清除已存密钥</button>}{settingsNotice && <p className="setting-notice">{settingsNotice}</p>}</section>
-        <section className="setting-card"><h2>关于文本与来源</h2><p>当前内置 {poems.length} 篇公版作品，含诗、词、曲、《诗经》、楚辞与古文。英文原文来自 PoetryDB；中文扩充文本来自 chinese-poetry，均保留来源链接。中文自动转写文本尚未逐篇校勘。</p><p>本地诗笺和历史不会自动发送给模型。模型只接收当前作品、当前选句和本篇最近的对话。</p><p className="license-credit">Poetry data from <button className="inline-link" onClick={() => openSource("https://poetrydb.org")}>PoetryDB</button>, licensed under CC BY 4.0.</p></section>
+        <section className="setting-card"><h2>关于文本与来源</h2><p>当前内置 {poems.length} 篇公版作品，含诗、词、曲、《诗经》、楚辞与古文。英文原文来自 PoetryDB；中文扩充文本来自 chinese-poetry，均保留来源链接。中文自动转写文本尚未逐篇校勘。</p><p>本地诗笺和历史不会自动发送给模型。共读时发送当前作品、选句和本篇最近的对话；AI 寻诗时发送你的需求及最多 32 篇本地候选的题名、作者、主题标签和首句。</p><p className="license-credit">Poetry data from <button className="inline-link" onClick={() => openSource("https://poetrydb.org")}>PoetryDB</button>, licensed under CC BY 4.0.</p></section>
         <span className="settings-footnote">运行环境：{isDesktop ? "Poema 桌面版" : "浏览器预览"}</span>
       </div>}
+      {page === "chat" && <div className="page-wrap poem-chat-page"><div className="page-eyebrow">A CONVERSATION ABOUT ONE TEXT</div><h1 className="page-title">与《{current.title}》共读</h1><p className="page-description">从一篇文字开始，可以慢慢读，也可以一直追问。</p><button className="chat-context" onClick={() => setPage("today")}><span><small>正在共读 · 点击回到原文</small><strong>{current.title}</strong><em>{current.author} · {current.era} · {current.form}</em></span><ArrowRight size={18}/></button>{selectedLine && <div className="selected-quote">「{selectedLine}」<button onClick={() => setSelectedLine(undefined)} title="取消选句"><X size={14}/></button></div>}<div className="chat-transcript">{messages.length === 0 && <div className="chat-welcome"><Feather size={27}/><h2>先让文字坐在这里。</h2><p>你可以从一个字、一种声音，或读完后的感觉开始。</p><div className="prompt-chips"><button onClick={() => void send("先不要讲背景，带我慢慢读这篇作品。")}>慢慢读</button><button onClick={() => void send("这篇作品的声音和节奏有什么特别？")}>听它的声音</button><button onClick={() => void send("能给出另一种不同的读法吗？")}>另一种读法</button></div></div>}{messages.map((message, index) => <div className={`chat-message ${message.role}`} key={message.id || index}><span>{message.role === "user" ? "我" : "POEMA · 共读者"}</span><p>{message.content}</p></div>)}{busy && <div className="thinking">Poema 正在细读…</div>}{error && <div className="chat-error">{error} <button onClick={() => setPage("settings")}>检查设置</button></div>}</div><div className="chat-compose"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} placeholder="写下你想问的，Enter 发送…" rows={3}/><button disabled={busy || !draft.trim()} onClick={() => void send()} title="发送"><Send size={18}/></button></div><div className="note-compose"><span>只写给自己</span><div><input value={noteDraft} onChange={e => setNoteDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveNote(); }} placeholder="记下此刻的一句话"/><button onClick={saveNote} disabled={!noteDraft.trim()}>留在诗笺</button></div></div></div>}
     </main>
 
     {rightsOpen && <div className="modal-backdrop" onClick={() => setRightsOpen(false)}><section className="rights-modal" role="dialog" aria-modal="true" aria-label="版权与版本说明" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setRightsOpen(false)} title="关闭"><X size={18}/></button><div className="page-eyebrow">SOURCE & EDITION</div><h2>{current.title}</h2><p className="rights-author">{current.author} · {current.era}</p><dl><dt>文本来源</dt><dd>{current.sourceName}</dd><dt>权利与整理</dt><dd>{current.rights.basis}</dd><dt>校勘状态</dt><dd>{current.quality === "imported" ? "公开语料导入，尚未逐首人工校勘" : "精选样本，仍需在正式发行前核对具体底本"}</dd>{current.rights.textCredit && <><dt>署名</dt><dd>{current.rights.textCredit}</dd></>}</dl><button className="primary-soft" onClick={() => openSource(current.sourceUrl)}>打开来源 <ExternalLink size={14}/></button></section></div>}
 
-    {page === "today" && readingOpen && <div className="reading-panel"><div className="panel-header"><div><span>共读 · {current.title}</span><h2>和这首诗再待一会儿</h2></div><button className="icon-button" onClick={() => setReadingOpen(false)} title="关闭"><X size={19}/></button></div>{selectedLine && <div className="selected-quote">「{selectedLine}」<button onClick={() => setSelectedLine(undefined)} title="取消选句"><X size={14}/></button></div>}<div className="conversation">{messages.length === 0 && <div className="conversation-start"><Feather size={25}/><p>你可以从一个字、一种声音，或者读完后的感觉开始。</p><div className="prompt-chips"><button onClick={() => send("先不要讲背景，带我慢慢读这首诗。")}>慢慢读</button><button onClick={() => send("这首诗的声音和节奏有什么特别？")}>听它的声音</button><button onClick={() => send("能给出另一种不同的读法吗？")}>另一种读法</button></div></div>}{messages.map((m, i) => <div className={`message ${m.role}`} key={i}><span>{m.role === "user" ? "我" : "POEMA"}</span><p>{m.content}</p></div>)}{busy && <div className="thinking">Poema 正在细读…</div>}{error && <div className="chat-error">{error} <button onClick={() => setPage("settings")}>检查设置</button></div>}</div><div className="chat-compose"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} placeholder="写下你想问的，Enter 发送…" rows={2}/><button disabled={busy || !draft.trim()} onClick={() => send()} title="发送"><Send size={18}/></button></div><div className="note-compose"><span>只写给自己</span><div><input value={noteDraft} onChange={e => setNoteDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveNote(); }} placeholder="记下此刻的一句话"/><button onClick={saveNote} disabled={!noteDraft.trim()}>留在诗笺</button></div></div></div>}
   </div>;
 }

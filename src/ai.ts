@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Message, Poem } from "./domain";
+import { candidatePoems, normalizeFinderPlan, verifiedPicks, type FinderPick, type FinderPlan } from "./finder";
 
 export const isDesktop = "__TAURI_INTERNALS__" in window;
 
@@ -18,11 +19,9 @@ export async function hasKey(baseUrl: string) {
   return !!sessionStorage.getItem("poema.preview.key");
 }
 
-export async function chat(args: { baseUrl: string; model: string; poem: Poem; selectedLine?: string; messages: Message[]; signal?: AbortSignal }) {
-  const { baseUrl, model, poem, selectedLine, messages, signal } = args;
+async function complete(baseUrl: string, model: string, messages: { role: string; content: string }[], signal?: AbortSignal) {
   if (!model.trim()) throw new Error("请先在设置里填写模型名称");
-  const system = `你是一位谦逊、敏锐的古典文学共读者。只依据下方作品的已知文本回答。区分文本可见、历史事实与个人解读；无资料时不要编造作者生平、写作背景、译者或版本事实。允许多义，不要强行总结中心思想。回答简洁而具体，优先从具体文句出发。不要续写或声称未给出的文句属于原作。\n作品：${poem.title}；作者：${poem.author}；时代：${poem.era}；文体：${poem.form}。\n原文：\n${poem.lines.map((line, i) => `${i + 1}. ${line}`).join("\n")}\n${selectedLine ? `用户选中的文句：${selectedLine}` : ""}`;
-  const payload = { model: model.trim(), temperature: 0.6, messages: [{ role: "system", content: system }, ...messages.slice(-12).map(m => ({ role: m.role, content: m.content }))] };
+  const payload = { model: model.trim(), temperature: 0.6, messages };
   if (isDesktop) return invoke<string>("ai_chat", { baseUrl, payload });
   const key = sessionStorage.getItem("poema.preview.key");
   if (!key) throw new Error("请先在设置里填写 API Key");
@@ -32,4 +31,37 @@ export async function chat(args: { baseUrl: string; model: string; poem: Poem; s
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content.trim()) throw new Error("模型没有返回可读文字");
   return content.trim();
+}
+
+function parseJson(answer: string): unknown {
+  const cleaned = answer.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  try { return JSON.parse(start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned); }
+  catch { throw new Error("模型未按约定返回寻诗计划，请再试一次"); }
+}
+
+export async function seekPoems(args: { baseUrl: string; model: string; request: string; poems: Poem[]; seenIds: string[]; onPlan?: (plan: FinderPlan) => void }) {
+  const { baseUrl, model, request, poems, seenIds, onPlan } = args;
+  const planAnswer = await complete(baseUrl, model, [
+    { role: "system", content: "你是一位谨慎而富有文学感受力的寻诗向导。把用户需求转成检索计划，只输出 JSON 对象，不要 Markdown。字段：interpretation（简短中文理解）、terms（0-8 个可在题名作者原文中检索的具体词，不要自造诗句）、genres（诗/词/曲/诗经/楚辞/古文的数组）、language（all/zh/en）、themes（moon/rain/journey/nature/parting/time/solitude/hope 的数组）、excludeThemes（同前）、mood（all/lighter/darker）、short（布尔）。不要把用户没有提出的文体或语言变成硬限制。" },
+    { role: "user", content: request },
+  ]);
+  const plan = normalizeFinderPlan(parseJson(planAnswer));
+  onPlan?.(plan);
+  const candidates = candidatePoems(poems, plan, seenIds, 32, request);
+  if (!candidates.length) return { plan, picks: [] as FinderPick[], candidates };
+  const candidateText = candidates.map(poem => `${poem.id}｜${poem.title}｜${poem.author}｜${poem.era}｜${poem.form}｜主题标签:${poem.themes.join(",")}｜首句:${poem.lines.find(Boolean)?.slice(0, 55) || ""}`).join("\n");
+  const selectionAnswer = await complete(baseUrl, model, [
+    { role: "system", content: "你只可从提供的本地候选作品中选 4-6 篇，不可编造作品或诗句。根据用户的细微需求，兼顾文体与作者多样性，优先挖掘不太耳熟的作品。只输出 JSON 对象：{\"picks\":[{\"id\":\"候选 ID\",\"reason\":\"一句具体且审慎的中文推荐理由\"}]}。理由只能根据候选信息推断，不要捏造写作背景；若只看到首句就不要声称通篇内容。" },
+    { role: "user", content: `需求：${request}\n理解：${plan.interpretation}\n候选：\n${candidateText}` },
+  ]);
+  const picks = verifiedPicks(parseJson(selectionAnswer), candidates);
+  return { plan, picks: picks.length ? picks : candidates.slice(0, 6).map(poem => ({ id: poem.id, reason: "这篇作品与所述意象或心绪相近，值得从原文读起。" })), candidates };
+}
+
+export async function chat(args: { baseUrl: string; model: string; poem: Poem; selectedLine?: string; messages: Message[]; signal?: AbortSignal }) {
+  const { baseUrl, model, poem, selectedLine, messages, signal } = args;
+  const system = `你是一位谦逊、敏锐的古典文学共读者。只依据下方作品的已知文本回答。区分文本可见、历史事实与个人解读；无资料时不要编造作者生平、写作背景、译者或版本事实。允许多义，不要强行总结中心思想。回答简洁而具体，优先从具体文句出发。不要续写或声称未给出的文句属于原作。\n作品：${poem.title}；作者：${poem.author}；时代：${poem.era}；文体：${poem.form}。\n原文：\n${poem.lines.map((line, i) => `${i + 1}. ${line}`).join("\n")}\n${selectedLine ? `用户选中的文句：${selectedLine}` : ""}`;
+  return complete(baseUrl, model, [{ role: "system", content: system }, ...messages.slice(-12).map(m => ({ role: m.role, content: m.content }))], signal);
 }
