@@ -1,0 +1,33 @@
+:root{--theme-canvas:#f7f6f2;--theme-sidebar:#e9ecdf;--theme-surface:#fffefa;--theme-ink:#34352e;--theme-muted:#829080;--theme-accent:#476f52;--theme-border:#d9dfd4;--theme-poem:#3b4038}
+body,:root{background:var(--theme-canvas);color:var(--theme-ink)}
+.main-content,.reader-main,.page-wrap{background:var(--theme-canvas)}
+.sidebar{background:var(--theme-sidebar);border-color:var(--theme-border)}
+.topbar{background:var(--theme-surface);border-color:var(--theme-border)}
+.reader-aside{background:var(--theme-sidebar);border-color:var(--theme-border)}
+.poem-card,.setting-card,.rights-modal,.reading-panel{background:var(--theme-surface);border-color:var(--theme-border)}
+.brand,.brand strong,.poem-heading h1,.page-title,.setting-card h2,.reader-aside h2,.rights-modal h2,.panel-header h2,.poem-card strong,.path-list strong,.notes-section h2{color:var(--theme-ink)}
+.poem-line{color:var(--theme-poem)}
+.poem-heading p,.meta-line,.page-description,.setting-card p,.setting-card label,.card-author,.card-overline,.card-line,.path-list small,.aside-intro,.source-line,.settings-footnote,.sidebar-note,.nav button,.settings-link,.edition-pill,.filters>span,.rights-author,.rights-modal dt,.rights-modal dd,.message p,.panel-header span{color:var(--theme-muted)}
+.nav button.active,.settings-link.active,.path-tabs button.selected,.line-hint,.line-hint button,.text-button,.source-line a,.source-line button,.inline-link,.card-reason,.note-item span,.load-more,.clear-key{color:var(--theme-accent)}
+.primary-soft,.chat-compose button{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--theme-canvas)}
+.primary-soft:hover{filter:brightness(.9);background:var(--theme-accent)}
+.primary-soft.is-saved,.nav button.active,.settings-link.active,.path-tabs button.selected,.poem-line.selected,.selected-quote,.message.user,.prompt-chips button{background:color-mix(in srgb,var(--theme-accent) 17%,var(--theme-surface));color:var(--theme-accent)}
+.nav button:hover,.settings-link:hover,.ghost-button:hover,.outline-button:hover,.icon-button:hover,.poem-line:hover{background:color-mix(in srgb,var(--theme-accent) 11%,var(--theme-surface));color:var(--theme-accent)}
+.ghost-button,.outline-button,.path-tabs button,.filters label,.search-box,.setting-card input,.chat-compose textarea,.prompt-chips button,.load-more{border-color:var(--theme-border);color:var(--theme-ink)}
+.search-box,.setting-card input,.chat-compose textarea{background:var(--theme-surface);color:var(--theme-ink)}
+.search-box input,.setting-card input,.chat-compose textarea,.note-compose input{color:var(--theme-ink)}
+.chapter-line,.sidebar-note,.source-line,.notes-section,.note-item,.path-list>button,.panel-header,.chat-compose,.note-compose{border-color:var(--theme-border)}
+.chapter-line{background:var(--theme-border)}
+.selected-quote{border-color:var(--theme-accent)}
+.theme-presets{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+.theme-presets button{border:1px solid var(--theme-border);background:var(--theme-surface);color:var(--theme-ink);border-radius:999px;padding:8px 16px}
+.theme-presets button.active{border-color:var(--theme-accent);color:var(--theme-accent)}
+.theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.theme-control{border:1px solid var(--theme-border);border-radius:9px;padding:12px 14px;display:grid;grid-template-columns:1fr 42px 100px;align-items:center;gap:10px;color:var(--theme-ink)}
+.theme-control strong{display:block;font-size:12px;font-weight:600}.theme-control small{display:block;color:var(--theme-muted);font-size:10px;margin-top:4px}
+.setting-card .theme-control input[type=color]{width:38px;height:38px;padding:2px;margin:0;border:1px solid var(--theme-border);cursor:pointer}
+.setting-card .theme-control input[type=text]{width:100%;padding:7px;margin:0;font-size:11px;font-family:monospace}
+.theme-reset{margin-top:20px}
+.mobile-settings{display:none!important}
+@media(max-width:850px){.theme-grid{grid-template-columns:1fr}}
+@media(max-width:550px){.settings-link{display:none}.nav .mobile-settings{display:flex!important}.nav button{width:25%}.theme-control{grid-template-columns:1fr 38px 85px}.setting-card{padding:22px 18px}}

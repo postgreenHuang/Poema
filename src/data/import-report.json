@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-11-09T03:11:50.871Z",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/chinese-poetry/chinese-poetry/master/%E5%85%A8%E5%94%90%E8%AF%97/%E5%94%90%E8%AF%97%E4%B8%89%E7%99%BE%E9%A6%96.json",
+      "sha256": "d77a145f7470da2ed2f79515944563c062ffc43fceda07f195a36ead66b7e5c7",
+      "received": 366,
+      "accepted": 358
+    },
+    {
+      "url": "https://poetrydb.org/random/100:author",
+      "sha256": "ca04b115dc0fc9959c352b0b0bf25c8e0d57ba7d27c215c4d2cfa80d22ce63f1",
+      "received": 100,
+      "accepted": 61
+    }
+  ],
+  "total": 418,
+  "note": "中文底本与异文未逐首校勘；英文随机来源每次重导可能变化。"
+}
