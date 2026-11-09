@@ -2,6 +2,8 @@
 
 use reqwest::Url;
 use serde_json::Value;
+use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
 use tauri_plugin_opener::OpenerExt;
 
@@ -78,10 +80,69 @@ fn open_external(url: String, app: tauri::AppHandle) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+fn sync_dir(folder: &str) -> Result<PathBuf, String> {
+    if folder.trim().is_empty() { return Err("请先选择坚果云在本机的同步文件夹".into()); }
+    let base = PathBuf::from(folder.trim()).canonicalize().map_err(|_| "同步文件夹不存在，请先在坚果云客户端同步到本机".to_string())?;
+    if !base.is_dir() { return Err("同步路径不是文件夹".into()); }
+    Ok(base.join("Poema").join("devices"))
+}
+
+fn valid_device_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+#[tauri::command]
+fn read_sync_snapshots(folder: String) -> Result<Value, String> {
+    let dir = sync_dir(&folder)?;
+    if !dir.exists() { return Ok(serde_json::json!({ "snapshots": [], "skipped": 0 })); }
+    let mut snapshots = Vec::new();
+    let mut skipped = 0;
+    for entry in fs::read_dir(dir).map_err(|e| format!("读取同步目录失败：{e}"))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if path.extension().and_then(|x| x.to_str()) != Some("json") { continue; }
+        if !name.strip_suffix(".json").is_some_and(valid_device_id) || !entry.file_type().map_err(|e| e.to_string())?.is_file() {
+            skipped += 1; continue;
+        }
+        let metadata = entry.metadata().map_err(|e| e.to_string())?;
+        if metadata.len() > 10_000_000 || snapshots.len() >= 64 { skipped += 1; continue; }
+        match fs::read(&path).ok().and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()) {
+            Some(value) if value.is_object() && value.get("version").and_then(Value::as_u64) == Some(1) => snapshots.push(value),
+            _ => skipped += 1,
+        }
+    }
+    Ok(serde_json::json!({ "snapshots": snapshots, "skipped": skipped }))
+}
+
+#[tauri::command]
+fn write_sync_snapshot(folder: String, device_id: String, payload: Value) -> Result<(), String> {
+    if !valid_device_id(&device_id) { return Err("设备标识无效".into()); }
+    if payload.get("version").and_then(Value::as_u64) != Some(1) { return Err("诗笺数据版本不兼容".into()); }
+    let bytes = serde_json::to_vec(&payload).map_err(|e| e.to_string())?;
+    if bytes.len() > 10_000_000 { return Err("诗笺数据过大，请先导出备份".into()); }
+    let dir = sync_dir(&folder)?;
+    fs::create_dir_all(&dir).map_err(|e| format!("创建同步目录失败：{e}"))?;
+    let target = dir.join(format!("{device_id}.json"));
+    let temporary = dir.join(format!("{device_id}.tmp"));
+    let backup = dir.join(format!("{device_id}.bak"));
+    fs::write(&temporary, bytes).map_err(|e| format!("写入同步临时文件失败：{e}"))?;
+    if target.exists() {
+        fs::copy(&target, &backup).map_err(|e| format!("备份同步文件失败：{e}"))?;
+        fs::remove_file(&target).map_err(|e| format!("替换同步文件失败：{e}"))?;
+    }
+    if let Err(error) = fs::rename(&temporary, &target) {
+        if backup.exists() && !target.exists() { let _ = fs::copy(&backup, &target); }
+        return Err(format!("保存同步文件失败：{error}"));
+    }
+    if backup.exists() { let _ = fs::remove_file(backup); }
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, open_external])
+        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, open_external, read_sync_snapshots, write_sync_snapshot])
         .run(tauri::generate_context!())
         .expect("Poema 启动失败");
 }

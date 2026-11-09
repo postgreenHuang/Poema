@@ -21,7 +21,7 @@ export interface Poem {
   quality?: "curated" | "imported";
 }
 export interface Note { poemId: string; line?: string; text: string; savedAt: string }
-export interface Message { role: "user" | "assistant"; content: string; createdAt: string }
+export interface Message { id?: string; role: "user" | "assistant"; content: string; createdAt: string }
 
 export const themeLabels: Record<Theme, string> = {
   moon: "月与夜", rain: "雨与水", journey: "远行", nature: "山野", parting: "离别", time: "时间", solitude: "独处", hope: "微光"

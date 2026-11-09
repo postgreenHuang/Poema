@@ -30,6 +30,18 @@ body,:root{background:var(--theme-canvas);color:var(--theme-ink)}
 .setting-card .theme-control input[type=color]{width:38px;height:38px;padding:2px;margin:0;border:1px solid var(--theme-border);cursor:pointer}
 .setting-card .theme-control input[type=text]{width:100%;padding:7px;margin:0;font-size:11px;font-family:monospace}
 .theme-reset{margin-top:20px}
+.library-section{margin:36px 0 0}
+.library-section h2{font-size:18px;font-weight:600;color:var(--theme-ink);margin:0 0 5px}
+.library-section>p{font-size:12px;color:var(--theme-muted);margin:0 0 17px}
+.recent-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.recent-item{text-align:left;min-width:0;min-height:106px;display:flex;flex-direction:column;align-items:flex-start;padding:17px 18px;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-surface);cursor:pointer}
+.recent-item:hover{border-color:var(--theme-accent);background:color-mix(in srgb,var(--theme-accent) 5%,var(--theme-surface))}
+.recent-item span{font-size:10px;color:var(--theme-accent);letter-spacing:.04em}
+.recent-item strong{font-size:16px;color:var(--theme-ink);margin:11px 0 5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent-item small{font-size:11px;color:var(--theme-muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sync-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:17px}
+.sync-actions .ghost-button{border:1px solid var(--theme-border);border-radius:7px;padding:10px 16px}
+.setting-card .sync-warning{font-size:11px;line-height:1.7;margin-top:16px;color:var(--theme-muted)}
 .mobile-settings{display:none!important}
-@media(max-width:850px){.theme-grid{grid-template-columns:1fr}}
-@media(max-width:550px){.settings-link{display:none}.nav .mobile-settings{display:flex!important}.nav button{width:25%}.theme-control{grid-template-columns:1fr 38px 85px}.setting-card{padding:22px 18px}}
+@media(max-width:850px){.theme-grid{grid-template-columns:1fr}.recent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:550px){.settings-link{display:none}.nav .mobile-settings{display:flex!important}.nav button{width:25%}.theme-control{grid-template-columns:1fr 38px 85px}.setting-card{padding:22px 18px}.recent-grid{grid-template-columns:1fr}}

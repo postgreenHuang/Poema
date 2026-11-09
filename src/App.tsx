@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Compass, Download, ExternalLink, Feather, MessageCircle, Moon, Search, Send, Settings, Shuffle, Sparkles, X } from "lucide-react";
 import { chat, hasKey, saveKey, isDesktop, openSource } from "./ai";
 import { chooseNext, genreLabels, genreOf, relatedPoems, searchPoems, themeLabels, type Genre, type Language, type Message, type PathKind, type Poem, type Theme } from "./domain";
 import { poems } from "./catalog";
-import { exportLibrary, loadLibrary, saveLibrary, type Library } from "./storage";
+import { exportLibrary, getDeviceId, loadLibrary, loadSyncFolder, mergeLibraries, recordVisit, saveLibrary, saveSyncFolder, setSaved, type Library } from "./storage";
+import { readSyncSnapshots, writeSyncSnapshot } from "./sync";
 import { applyTheme, defaultTheme, loadTheme, saveTheme, themeParts, themePresets, type ThemeColors, type ThemePart } from "./theme";
 
 type Page = "today" | "search" | "notebook" | "settings";
@@ -34,6 +35,12 @@ function ThemeControl({ part, value, onChange }: { part: typeof themeParts[numbe
 
 export default function App() {
   const [library, setLibrary] = useState<Library>(loadLibrary);
+  const [syncFolder, setSyncFolder] = useState(loadSyncFolder);
+  const [syncDraft, setSyncDraft] = useState(loadSyncFolder);
+  const [syncReady, setSyncReady] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("");
+  const writeQueue = useRef<Promise<void>>(Promise.resolve());
+  const initialVisitLogged = useRef(false);
   const [themeColors, setThemeColors] = useState<ThemeColors>(loadTheme);
   const [page, setPage] = useState<Page>("today");
   const [currentId, setCurrentId] = useState(() => loadLibrary().lastPoemId || chooseNext(poems, []).id);
@@ -44,6 +51,7 @@ export default function App() {
   const [genre, setGenre] = useState<"all" | Genre>("all");
   const [theme, setTheme] = useState<"all" | Theme>("all");
   const [visibleLimit, setVisibleLimit] = useState(24);
+  const [historyLimit, setHistoryLimit] = useState(12);
   const [readingOpen, setReadingOpen] = useState(false);
   const [rightsOpen, setRightsOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -63,37 +71,98 @@ export default function App() {
   }, [query, language, theme, genre]);
   const paths = useMemo(() => relatedPoems(current, poems, pathKind), [current, pathKind]);
   const savedPoems = library.savedIds.map(id => poems.find(p => p.id === id)).filter((p): p is Poem => !!p);
+  const recentReads = useMemo(() => {
+    const found = new Set<string>();
+    const byId = new Map(poems.map(poem => [poem.id, poem]));
+    return library.readHistory.filter(event => {
+      if (found.has(event.poemId) || !byId.has(event.poemId)) return false;
+      found.add(event.poemId); return true;
+    }).map(event => ({ event, poem: byId.get(event.poemId)! }));
+  }, [library.readHistory]);
+  const recentConversations = useMemo(() => Object.entries(library.conversations)
+    .filter(([, messages]) => messages.length > 0)
+    .map(([id, messages]) => ({ poem: poems.find(poem => poem.id === id), last: messages[messages.length - 1] }))
+    .filter((entry): entry is { poem: Poem; last: Message } => !!entry.poem)
+    .sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt)).slice(0, 8), [library.conversations]);
 
   useEffect(() => { saveLibrary(library); }, [library]);
+  useEffect(() => {
+    if (initialVisitLogged.current) return;
+    initialVisitLogged.current = true;
+    setLibrary(old => recordVisit(old, currentId));
+  }, []);
+  useEffect(() => {
+    if (!isDesktop || !syncFolder) return;
+    let active = true;
+    async function refresh() {
+      try {
+        const { snapshots, skipped } = await readSyncSnapshots(syncFolder);
+        if (!active) return;
+        setLibrary(old => snapshots.reduce(mergeLibraries, old));
+        setSyncReady(true);
+        setSyncStatus(`已读取 ${snapshots.length} 台设备 · ${new Date().toLocaleTimeString("zh-CN")}${skipped ? ` · 跳过 ${skipped} 个无效文件` : ""}`);
+      } catch (error) {
+        if (active) { setSyncReady(false); setSyncStatus(`同步读取失败：${String(error)}`); }
+      }
+    }
+    void refresh();
+    const timer = window.setInterval(refresh, 20_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [syncFolder]);
+  useEffect(() => {
+    if (!isDesktop || !syncFolder || !syncReady) return;
+    const timer = window.setTimeout(() => {
+      writeQueue.current = writeQueue.current.then(() => writeSyncSnapshot(syncFolder, getDeviceId(), library))
+        .then(() => setSyncStatus(`已保存到同步文件夹 · ${new Date().toLocaleTimeString("zh-CN")}`))
+        .catch(error => setSyncStatus(`同步写入失败：${String(error)}`));
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [library, syncFolder, syncReady]);
   useEffect(() => { applyTheme(themeColors); saveTheme(themeColors); }, [themeColors]);
   useEffect(() => { hasKey(library.aiBaseUrl).then(setKeyReady).catch(() => setKeyReady(false)); }, [library.aiBaseUrl]);
   useEffect(() => { setVisibleLimit(24); }, [query, language, theme, genre]);
 
   function update(patch: Partial<Library>) { setLibrary(old => ({ ...old, ...patch })); }
+  async function connectSync() {
+    const folder = syncDraft.trim();
+    if (!isDesktop) { setSyncStatus("坚果云文件夹同步仅在桌面版可用。"); return; }
+    try {
+      const { snapshots, skipped } = await readSyncSnapshots(folder);
+      setLibrary(old => snapshots.reduce(mergeLibraries, old));
+      saveSyncFolder(folder); setSyncFolder(folder); setSyncReady(true);
+      setSyncStatus(`已连接，读到 ${snapshots.length} 台设备${skipped ? `；跳过 ${skipped} 个无效文件` : ""}。本机改动将自动写入。`);
+    } catch (error) { setSyncStatus(`连接失败：${String(error)}`); }
+  }
+  function disconnectSync() {
+    saveSyncFolder(""); setSyncFolder(""); setSyncReady(false); setSyncStatus("已停止同步；坚果云中的 Poema 文件未删除。");
+  }
   function updateTheme(key: ThemePart, value: string) { setThemeColors(old => ({ ...old, [key]: value })); }
   function openPoem(poem: Poem, fromPath = false) {
     if (fromPath) setPathHistory(old => [...old, current.id].slice(-30));
     setCurrentId(poem.id); setSelectedLine(undefined); setReadingOpen(false); setRightsOpen(false); setError(""); setPage("today");
-    setLibrary(old => ({ ...old, lastPoemId: poem.id, seenIds: [...old.seenIds.filter(id => id !== poem.id), poem.id].slice(-100) }));
+    setLibrary(old => recordVisit(old, poem.id));
     window.scrollTo(0, 0);
   }
   function nextPoem() { openPoem(chooseNext(poems, library.seenIds, current.id)); }
-  function toggleSaved() { update({ savedIds: saved ? library.savedIds.filter(id => id !== current.id) : [current.id, ...library.savedIds] }); }
+  function toggleSaved() { setLibrary(old => setSaved(old, current.id, !old.savedIds.includes(current.id))); }
   function saveNote() {
     if (!noteDraft.trim()) return;
-    setLibrary(old => ({ ...old, savedIds: old.savedIds.includes(current.id) ? old.savedIds : [current.id, ...old.savedIds], notes: [{ poemId: current.id, line: selectedLine, text: noteDraft.trim(), savedAt: new Date().toISOString() }, ...old.notes] }));
+    setLibrary(old => {
+      const withNote = { ...old, notes: [{ poemId: current.id, line: selectedLine, text: noteDraft.trim(), savedAt: new Date().toISOString() }, ...old.notes] };
+      return old.savedIds.includes(current.id) ? withNote : setSaved(withNote, current.id, true);
+    });
     setNoteDraft("");
   }
   async function send(text = draft) {
     const content = text.trim();
     if (!content || busy) return;
     setDraft(""); setError(""); setReadingOpen(true); setBusy(true);
-    const userMessage: Message = { role: "user", content: selectedLine ? `关于「${selectedLine}」：${content}` : content, createdAt: new Date().toISOString() };
+    const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: selectedLine ? `关于「${selectedLine}」：${content}` : content, createdAt: new Date().toISOString() };
     const next = [...messages, userMessage];
     setLibrary(old => ({ ...old, conversations: { ...old.conversations, [current.id]: next } }));
     try {
       const answer = await chat({ baseUrl: library.aiBaseUrl, model: library.aiModel, poem: current, selectedLine, messages: next });
-      setLibrary(old => ({ ...old, conversations: { ...old.conversations, [current.id]: [...(old.conversations[current.id] || next), { role: "assistant", content: answer, createdAt: new Date().toISOString() }] } }));
+      setLibrary(old => ({ ...old, conversations: { ...old.conversations, [current.id]: [...(old.conversations[current.id] || next), { id: crypto.randomUUID(), role: "assistant", content: answer, createdAt: new Date().toISOString() }] } }));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   }
@@ -156,11 +225,23 @@ export default function App() {
         {!results.length && <div className="empty-state">暂时没有符合条件的作品。试着减少一个词，或换一种文体。</div>}
       </div>}
 
-      {page === "notebook" && <div className="page-wrap"><div className="page-eyebrow">YOUR PRIVATE ANTHOLOGY</div><div className="title-row"><div><h1 className="page-title">我的诗笺</h1><p className="page-description">留住那些想再遇见的诗，也留住当时的你。</p></div><button className="outline-button" onClick={() => exportLibrary(library)}><Download size={16}/> 导出诗笺</button></div>{savedPoems.length ? <div className="results-grid">{savedPoems.map(p => <PoemCard key={p.id} poem={p} reason={library.notes.find(n => n.poemId === p.id)?.text} onOpen={() => openPoem(p)}/>)}</div> : <div className="empty-state"><Bookmark size={28}/><p>诗笺还是空的。<br/>遇到喜欢的诗，就把它留在这里。</p><button className="primary-soft" onClick={() => setPage("today")}>去遇见一首诗 <ArrowRight size={16}/></button></div>}{library.notes.length > 0 && <section className="notes-section"><h2>留下的话</h2>{library.notes.map((note, i) => <div className="note-item" key={`${note.savedAt}-${i}`}><span>{poems.find(p => p.id === note.poemId)?.title}</span>{note.line && <em>「{note.line}」</em>}<p>{note.text}</p><small>{new Date(note.savedAt).toLocaleDateString("zh-CN")}</small></div>)}</section>}</div>}
+      {page === "notebook" && <div className="page-wrap">
+        <div className="page-eyebrow">YOUR PRIVATE ANTHOLOGY</div>
+        <div className="title-row"><div><h1 className="page-title">我的诗笺</h1><p className="page-description">读过、谈过、想留下的，都能从这里继续。</p></div><button className="outline-button" onClick={() => exportLibrary(library)}><Download size={16}/> 导出诗笺</button></div>
+        <section className="library-section"><h2>最近读过</h2><p>回到一篇文字，也回到当时停留的地方。</p>
+          {recentReads.length ? <><div className="recent-grid">{recentReads.slice(0, historyLimit).map(({ event, poem }) => <button className="recent-item" key={event.id} onClick={() => openPoem(poem)}><span>{genreOf(poem)} · {event.id.startsWith("legacy:") ? "旧版记录" : new Date(event.viewedAt).toLocaleString("zh-CN")}</span><strong>{poem.title}</strong><small>{poem.author}</small></button>)}</div>{recentReads.length > historyLimit && <button className="load-more" onClick={() => setHistoryLimit(old => old + 24)}>展开更多浏览记录</button>}</> : <div className="quiet-empty">尚无浏览记录。</div>}
+        </section>
+        <section className="library-section"><h2>最近共读</h2><p>每篇作品的对话分开保存，打开后可以接着谈。</p>
+          {recentConversations.length ? <div className="recent-grid">{recentConversations.map(({ poem, last }) => <button className="recent-item" key={poem.id} onClick={() => { openPoem(poem); setReadingOpen(true); }}><span>{new Date(last.createdAt).toLocaleString("zh-CN")}</span><strong>{poem.title}</strong><small>{last.content.slice(0, 70)}</small></button>)}</div> : <div className="quiet-empty">还没有共读对话。</div>}
+        </section>
+        <section className="library-section"><h2>留入诗笺</h2>{savedPoems.length ? <div className="results-grid">{savedPoems.map(p => <PoemCard key={p.id} poem={p} reason={library.notes.find(n => n.poemId === p.id)?.text} onOpen={() => openPoem(p)}/>)}</div> : <div className="quiet-empty">还没有收藏。遇到喜欢的作品，就把它留在这里。</div>}</section>
+        {library.notes.length > 0 && <section className="notes-section"><h2>留下的话</h2>{library.notes.map((note, i) => <div className="note-item" key={`${note.savedAt}-${i}`}><span>{poems.find(p => p.id === note.poemId)?.title}</span>{note.line && <em>「{note.line}」</em>}<p>{note.text}</p><small>{new Date(note.savedAt).toLocaleDateString("zh-CN")}</small></div>)}</section>}
+      </div>}
 
       {page === "settings" && <div className="page-wrap settings-page">
         <div className="page-eyebrow">YOUR READING SPACE</div><h1 className="page-title">偏好与 AI</h1>
-        <p className="page-description">作品与诗笺保存在这台设备上。配置兼容 Chat Completions 的模型后，可以开始持续共读。</p>
+        <p className="page-description">诗笺默认保存在这台设备上；也可以用坚果云同步收藏、足迹与对话。配置兼容 Chat Completions 的模型后，可以开始持续共读。</p>
+        <section className="setting-card"><h2>坚果云 · 多设备诗笺</h2><p>先在每台电脑安装坚果云客户端，并让同一个文件夹同步到本机。填写这台电脑上的文件夹路径后，Poema 会在其中建立 Poema/devices，定期合并各设备的记录。</p><label>本机同步文件夹<input value={syncDraft} onChange={e => setSyncDraft(e.target.value)} placeholder="例如 D:\Nutstore\我的坚果云" disabled={!isDesktop}/></label><div className="sync-actions"><button className="primary-soft" onClick={connectSync} disabled={!isDesktop || !syncDraft.trim()}>连接 / 立即同步</button>{syncFolder && <button className="ghost-button" onClick={disconnectSync}>停止同步</button>}</div><p className="setting-notice">{isDesktop ? (syncStatus || (syncFolder ? `已连接：${syncFolder}` : "尚未连接同步文件夹。")) : "浏览器预览不支持文件夹同步，请使用桌面版。"}</p><p className="sync-warning">同步文件包含明文收藏、笔记、浏览记录和共读对话；API Key 不会同步。请选择仅自己可访问的文件夹。</p></section>
         <section className="setting-card"><h2>为阅读调一盏灯</h2><p>从一套色调开始，再逐项调整页面、卡片、文字与按钮。更改即时生效，并只保存在这台设备上。</p><div className="theme-presets">{themePresets.map(preset => <button key={preset.name} className={themeParts.every(part => themeColors[part.key].toLowerCase() === preset.colors[part.key].toLowerCase()) ? "active" : ""} onClick={() => setThemeColors({ ...preset.colors })}>{preset.name}</button>)}</div><div className="theme-grid">{themeParts.map(part => <ThemeControl key={part.key} part={part} value={themeColors[part.key]} onChange={updateTheme}/>)}</div><button className="ghost-button theme-reset" onClick={() => setThemeColors({ ...defaultTheme })}>恢复默认色彩</button></section>
         <section className="setting-card"><h2>共读模型</h2><p>桌面版密钥保存到系统凭据库；浏览器预览只保留在当前会话。发送问题时会附上当前作品的原文和本篇最近的对话。</p><label>服务地址<input value={library.aiBaseUrl} onChange={e => update({ aiBaseUrl: e.target.value })} placeholder="https://api.openai.com/v1"/></label><label>模型名称<input value={library.aiModel} onChange={e => update({ aiModel: e.target.value })} placeholder="填写服务商提供的模型 ID"/></label><label>API Key <span className="key-status">{keyReady ? "已配置" : "未配置"}</span><input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={keyReady ? "输入新密钥可替换" : "输入密钥"}/></label><button className="primary-soft" onClick={storeKey}>保存密钥</button>{keyReady && <button className="clear-key" onClick={clearKey}>清除已存密钥</button>}{settingsNotice && <p className="setting-notice">{settingsNotice}</p>}</section>
         <section className="setting-card"><h2>关于文本与来源</h2><p>当前内置 {poems.length} 篇公版作品，含诗、词、曲、《诗经》、楚辞与古文。英文原文来自 PoetryDB；中文扩充文本来自 chinese-poetry，均保留来源链接。中文自动转写文本尚未逐篇校勘。</p><p>本地诗笺和历史不会自动发送给模型。模型只接收当前作品、当前选句和本篇最近的对话。</p><p className="license-credit">Poetry data from <button className="inline-link" onClick={() => openSource("https://poetrydb.org")}>PoetryDB</button>, licensed under CC BY 4.0.</p></section>
