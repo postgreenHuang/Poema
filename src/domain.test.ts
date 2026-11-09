@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseNext, parseSearchIntent, relatedPoems, searchPoems } from "./domain";
+import { chooseNext, genreOf, parseSearchIntent, relatedPoems, searchPoems } from "./domain";
 import { poems } from "./catalog";
 
 describe("寻诗", () => {
@@ -30,5 +30,28 @@ describe("诗路和偶遇", () => {
   it("有其他候选时不会立刻重复最近读过的诗", () => {
     const next = chooseNext(poems, [poems[1].id, poems[2].id], poems[0].id);
     expect([poems[0].id, poems[1].id, poems[2].id]).not.toContain(next.id);
+  });
+
+  it("中文偶遇优先从扩展语料发现作品，而非总回到名篇", () => {
+    const next = chooseNext(poems, [], undefined, () => 0.1);
+    expect(next.language).toBe("zh");
+    expect(next.collection).toBe("discovery");
+  });
+
+  it("大量偶遇中仍分散作者，并保持发现语料占多数", () => {
+    let seed = 71;
+    const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
+    const picks = Array.from({ length: 500 }, () => chooseNext(poems, [], undefined, random));
+    expect(picks.filter(p => p.collection === "discovery").length).toBeGreaterThan(275);
+    expect(new Set(picks.map(p => p.author)).size).toBeGreaterThan(100);
+  });
+
+  it("扩展语料覆盖多种文体，且可按文体名寻觅", () => {
+    const discoveries = poems.filter(p => p.collection === "discovery");
+    expect(discoveries.length).toBeGreaterThan(4500);
+    for (const genre of ["诗", "词", "曲", "诗经", "楚辞", "古文"] as const) {
+      expect(discoveries.some(p => genreOf(p) === genre)).toBe(true);
+    }
+    expect(searchPoems(poems, "诗经", "zh", "all").results.some(p => genreOf(p) === "诗经")).toBe(true);
   });
 });

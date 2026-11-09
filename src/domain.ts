@@ -1,4 +1,5 @@
 export type Language = "zh" | "en";
+export type Genre = "诗" | "词" | "曲" | "诗经" | "楚辞" | "古文";
 export type Theme = "moon" | "rain" | "journey" | "nature" | "parting" | "time" | "solitude" | "hope";
 export type PathKind = "image" | "mood" | "form" | "contrast";
 export interface Poem {
@@ -7,6 +8,9 @@ export interface Poem {
   author: string;
   era: string;
   language: Language;
+  genre?: Genre;
+  collection?: "discovery";
+  moodEvidence?: "lexical";
   form: string;
   lines: string[];
   themes: Theme[];
@@ -22,13 +26,15 @@ export interface Message { role: "user" | "assistant"; content: string; createdA
 export const themeLabels: Record<Theme, string> = {
   moon: "月与夜", rain: "雨与水", journey: "远行", nature: "山野", parting: "离别", time: "时间", solitude: "独处", hope: "微光"
 };
+export const genreLabels: Genre[] = ["诗", "词", "曲", "诗经", "楚辞", "古文"];
+export function genreOf(poem: Poem): Genre { return poem.genre || "诗"; }
 
 export function matches(poem: Poem, query: string, language: "all" | Language, theme: "all" | Theme) {
   if (language !== "all" && poem.language !== language) return false;
   if (theme !== "all" && !poem.themes.includes(theme)) return false;
   const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return true;
-  const haystack = [poem.title, poem.author, poem.era, poem.form, poem.lines.join(" "), ...poem.themes.map(t => themeLabels[t])].join(" ").toLocaleLowerCase();
+  const haystack = [poem.title, poem.author, poem.era, poem.form, genreOf(poem), poem.lines.join(" "), ...poem.themes.map(t => themeLabels[t])].join(" ").toLocaleLowerCase();
   return words.every(word => haystack.includes(word));
 }
 
@@ -92,12 +98,13 @@ export function searchPoems(poems: Poem[], query: string, language: "all" | Lang
     if (intent.author && poem.author !== intent.author) return false;
     if (intent.included.some(t => !poem.themes.includes(t))) return false;
     if (intent.excluded.some(t => poem.themes.includes(t))) return false;
-    if (intent.mood && poem.quality === "imported") return false;
+    if (intent.mood && poem.quality === "imported" && poem.moodEvidence !== "lexical") return false;
     if (intent.mood === "lighter" && poem.mood < 3) return false;
     if (intent.mood === "darker" && poem.mood > 2) return false;
     if (intent.short && poem.lines.filter(Boolean).length > 8) return false;
     return !intent.residual || matches(poem, intent.residual, "all", "all");
   });
+  if (!query.trim()) results.sort((a, b) => Number(b.collection === "discovery") - Number(a.collection === "discovery") || stableHash(a.id) - stableHash(b.id));
   return { results, intent };
 }
 
@@ -112,19 +119,56 @@ export function relation(from: Poem, to: Poem, kind: PathKind): { score: number;
 }
 
 export function relatedPoems(poem: Poem, poems: Poem[], kind: PathKind, count = 4) {
-  return poems.filter(p => (kind === "mood" || kind === "contrast") ? p.quality !== "imported" : true)
+  const ranked = poems.filter(p => (kind === "mood" || kind === "contrast") ? p.quality !== "imported" || p.moodEvidence === "lexical" : true)
     .map(p => ({ poem: p, ...relation(poem, p, kind) }))
     .filter(p => p.score >= 0)
-    .sort((a, b) => b.score - a.score || a.poem.id.localeCompare(b.poem.id))
-    .slice(0, count);
+    .sort((a, b) => b.score - a.score || Number(b.poem.collection === "discovery") - Number(a.poem.collection === "discovery") || stableHash(poem.id + kind + a.poem.id) - stableHash(poem.id + kind + b.poem.id));
+  const chosen: typeof ranked = [];
+  const authors = new Set<string>();
+  for (const item of ranked) {
+    if (authors.has(item.poem.author)) continue;
+    chosen.push(item); authors.add(item.poem.author);
+    if (chosen.length >= count) return chosen;
+  }
+  for (const item of ranked) {
+    if (!chosen.includes(item)) chosen.push(item);
+    if (chosen.length >= count) break;
+  }
+  return chosen;
 }
 
-export function chooseNext(poems: Poem[], seen: string[], currentId?: string) {
-  const pool = poems.filter(p => p.id !== currentId && !seen.slice(-Math.min(seen.length, 8)).includes(p.id));
+function stableHash(value: string) {
+  let result = 2166136261;
+  for (let i = 0; i < value.length; i++) result = Math.imul(result ^ value.charCodeAt(i), 16777619);
+  return result >>> 0;
+}
+
+export function chooseNext(poems: Poem[], seen: string[], currentId?: string, random: () => number = Math.random) {
+  const recent = new Set(seen.slice(-12));
+  const pool = poems.filter(p => p.id !== currentId && !recent.has(p.id));
   const candidates = pool.length ? pool : poems.filter(p => p.id !== currentId);
-  const currentLanguage = poems.find(p => p.id === currentId)?.language;
-  const desiredLanguage = currentLanguage === "zh" ? (Math.random() < 0.45 ? "en" : "zh") : (Math.random() < 0.65 ? "zh" : "en");
+  const desiredLanguage = random() < 0.75 ? "zh" : "en";
   const languagePool = candidates.filter(p => p.language === desiredLanguage);
-  const drawFrom = languagePool.length ? languagePool : candidates;
-  return drawFrom[Math.floor(Math.random() * drawFrom.length)] || poems[0];
+  let drawFrom = languagePool.length ? languagePool : candidates;
+  if (desiredLanguage === "zh") {
+    const discovery = drawFrom.filter(p => p.collection === "discovery");
+    const familiar = drawFrom.filter(p => p.collection !== "discovery");
+    if (discovery.length && (random() < 0.85 || !familiar.length)) {
+      drawFrom = discovery;
+      const genres: Genre[] = ["诗", "词", "曲", "诗经", "楚辞", "古文"];
+      const weights = [0.32, 0.27, 0.18, 0.11, 0.07, 0.05];
+      let draw = random();
+      let chosenGenre: Genre = "诗";
+      for (let i = 0; i < genres.length; i++) {
+        draw -= weights[i];
+        if (draw < 0) { chosenGenre = genres[i]; break; }
+      }
+      const genrePool = drawFrom.filter(p => genreOf(p) === chosenGenre);
+      if (genrePool.length) drawFrom = genrePool;
+    } else if (familiar.length) drawFrom = familiar;
+  }
+  const recentAuthors = new Set(poems.filter(p => recent.has(p.id) || p.id === currentId).map(p => p.author));
+  const otherAuthors = drawFrom.filter(p => !recentAuthors.has(p.author));
+  if (otherAuthors.length) drawFrom = otherAuthors;
+  return drawFrom[Math.floor(random() * drawFrom.length)] || poems[0];
 }

@@ -19,6 +19,8 @@ body,:root{background:var(--theme-canvas);color:var(--theme-ink)}
 .chapter-line,.sidebar-note,.source-line,.notes-section,.note-item,.path-list>button,.panel-header,.chat-compose,.note-compose{border-color:var(--theme-border)}
 .chapter-line{background:var(--theme-border)}
 .selected-quote{border-color:var(--theme-accent)}
+.poem-body.prose{align-items:stretch;max-width:620px}
+.prose .poem-line{text-align:left;font-size:18px;line-height:1.9;letter-spacing:.04em}
 .theme-presets{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
 .theme-presets button{border:1px solid var(--theme-border);background:var(--theme-surface);color:var(--theme-ink);border-radius:999px;padding:8px 16px}
 .theme-presets button.active{border-color:var(--theme-accent);color:var(--theme-accent)}

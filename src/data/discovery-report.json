@@ -1,0 +1,339 @@
+{
+  "source": "chinese-poetry@2.0.1 (MIT)",
+  "groups": [
+    {
+      "label": "唐诗",
+      "candidates": 10491,
+      "selected": 1500,
+      "authors": 460,
+      "files": [
+        {
+          "path": "quantangshi/poet.tang.5000.json",
+          "sha256": "a0306e6962cff01639ad9a00b042a201b8dec1f30fa5d768a7b112589887861e",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.5000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.10000.json",
+          "sha256": "b97d1c5509ab62f5b433dee2020c11c4deda4542e276683d1ada6619c34c2113",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.10000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.15000.json",
+          "sha256": "0386e58f46517daa3af0e0f385e0223f1efc0dac53afbe8fea64f99074d870b7",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.15000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.20000.json",
+          "sha256": "8ccf0783888b15bec60d0253e278cd4b67e94a77725df8ed079d4d8062d050b4",
+          "received": 1002,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.20000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.25000.json",
+          "sha256": "7e7c00ba3f7a95e97de5440f85affa9d54b420d31995b449e97a3e9ea00259f5",
+          "received": 1002,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.25000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.30000.json",
+          "sha256": "e71996f771d15476bae48751081b473b381774b5d335f6163b183f70a2eaed01",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.30000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.35000.json",
+          "sha256": "a9671b350e58b805fda88b2c17fa0bf3a05313017d28485010e6f60a69bdf945",
+          "received": 1001,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.35000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.40000.json",
+          "sha256": "851d0c3cb796c7f7c63a7765e28564b2c3be3d9691c9f43f88d4d3c64034b5d8",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.40000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.45000.json",
+          "sha256": "5177a4747b785f04897c36b77d5e033b11a7bcad759d1557fdb425166b8767f3",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.45000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.50000.json",
+          "sha256": "894bf4e729932d2b48ba731a48075347cf55626c08ac9f30b2fe412ca9e4e895",
+          "received": 999,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.50000.json"
+        },
+        {
+          "path": "quantangshi/poet.tang.55000.json",
+          "sha256": "3782736dfee847958363d4adeff1236f148aff3726f2964963b17b06dad2f97b",
+          "received": 999,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.tang.55000.json"
+        }
+      ]
+    },
+    {
+      "label": "宋诗",
+      "candidates": 14217,
+      "selected": 1368,
+      "authors": 384,
+      "files": [
+        {
+          "path": "quantangshi/poet.song.0.json",
+          "sha256": "182f75fb3ded001e73d2971becd1ebae3aa06e11ce960091c887aed70f3b46b2",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.0.json"
+        },
+        {
+          "path": "quantangshi/poet.song.10000.json",
+          "sha256": "31921fd22eaa14848cb893ca91a9b6a6019ccae419e6fceb55fae8c7767eaa63",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.10000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.30000.json",
+          "sha256": "f09e92afcd44f950bef0c63542d853d80e13d420f53ac61ed50d3c2f7c4665ad",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.30000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.50000.json",
+          "sha256": "43ae01624d75df752ac87fcf6001dd54f32c9a5a9726f11c901b2223d6aa0538",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.50000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.70000.json",
+          "sha256": "5a9b4660f8fffb08005a78143f9ab7289d20c0090dca77fea3011d5361bc8732",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.70000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.90000.json",
+          "sha256": "c9ec99fd26f35aecb1a9ab0fb6b2f14220c4a370cb35e5714850ba38c26dde32",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.90000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.100000.json",
+          "sha256": "f97f30a94ccc2297981a8424724dd1299005bf87a56c29e15903e9d7cacb7d76",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.100000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.120000.json",
+          "sha256": "441ca6817f2ba748833b6e8b6a066711a37c0df8e78b36248e41987e6a094471",
+          "received": 1001,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.120000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.140000.json",
+          "sha256": "9df95cee6b24bd2af034c8d6c83da3aac22b62086fb9c7316f54ceb319a356d8",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.140000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.150000.json",
+          "sha256": "94cdf01969be95b64b960b6ce53b790db8b8c85a622b92797c1ae9e72ea506bc",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.150000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.170000.json",
+          "sha256": "8a32af24510b2d1fdc7019b37d546a376b3ded646f2a277b44f153df1770ad3d",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.170000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.190000.json",
+          "sha256": "7d359d513594954281990e5477d65b4ac9defb623b2a804bd80b891d71b27722",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.190000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.200000.json",
+          "sha256": "0e45f62e0f9d647911e56f9dbf3eb47c68194d4eda3b5cc66daedfe93841657f",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.200000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.230000.json",
+          "sha256": "ef563e9f346b9f22601c9c27c6213c36cb265464ecc9a203c4b224082db8eefa",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.230000.json"
+        },
+        {
+          "path": "quantangshi/poet.song.250000.json",
+          "sha256": "a39b97fb0c2bc2b4e9eda268d5328cadf11a0a314f535a81401b6a764490a755",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%A8%E5%94%90%E8%AF%97/poet.song.250000.json"
+        }
+      ]
+    },
+    {
+      "label": "宋词",
+      "candidates": 12125,
+      "selected": 1200,
+      "authors": 337,
+      "files": [
+        {
+          "path": "songci/ci.song.0.json",
+          "sha256": "7761bc5ef50305753ea3dcea9e1ef3164e153e3ee366169e9c5a9a7d85b21b22",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.0.json"
+        },
+        {
+          "path": "songci/ci.song.1000.json",
+          "sha256": "5f79a2d9011e6d414f04e51176c5d4f4c762fd784dce98b035968367b6f2ef4e",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.1000.json"
+        },
+        {
+          "path": "songci/ci.song.3000.json",
+          "sha256": "1791391a8a2ca855e133f7ea48bf0c104b3890d628ae2929f9378960a66c1427",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.3000.json"
+        },
+        {
+          "path": "songci/ci.song.5000.json",
+          "sha256": "1e10ee4be18e225c2efa0bb8d58691ebb6d40cd83588f308d9635a37392bdadd",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.5000.json"
+        },
+        {
+          "path": "songci/ci.song.7000.json",
+          "sha256": "8fe3f7ac40ab7d6c80cdd42305e848c1dc51cff26bc42b335ddfdfaccd48d1ba",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.7000.json"
+        },
+        {
+          "path": "songci/ci.song.9000.json",
+          "sha256": "bd6a4d90b17ef195f32e38dfa483b0d39d671db3cdd5b462b292aac6916f26a6",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.9000.json"
+        },
+        {
+          "path": "songci/ci.song.10000.json",
+          "sha256": "8d37b015132bf9776fb41c44d445572d2cd9bf5e250dde213596c480e5962545",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.10000.json"
+        },
+        {
+          "path": "songci/ci.song.11000.json",
+          "sha256": "9a4f5082638f82339afbde99f1af7bae1719207f77d5516cb8f6d370c9c1d0c9",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.11000.json"
+        },
+        {
+          "path": "songci/ci.song.13000.json",
+          "sha256": "dd51b268dec508d44a18e2d4a84edd109ff8c532b6eace4160ea88674f62515c",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.13000.json"
+        },
+        {
+          "path": "songci/ci.song.15000.json",
+          "sha256": "5e441c85494955290138ed8561decb3f302d3628fe390cea3477e1d446039525",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.15000.json"
+        },
+        {
+          "path": "songci/ci.song.17000.json",
+          "sha256": "b46b9f908b5bb0a3b4dd18f268c233a50b8b794d6ab1ec79afcb3612792f0574",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.17000.json"
+        },
+        {
+          "path": "songci/ci.song.19000.json",
+          "sha256": "c6becb6a81cc04e25564f501ff768482b6c328d976c48e2003c8b8bd94ef4612",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.19000.json"
+        },
+        {
+          "path": "songci/ci.song.20000.json",
+          "sha256": "1dfc08051969ab2ecdfa3eea8b29bf79d3dfe9ad1133127f25f622c2b14348c2",
+          "received": 1000,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.20000.json"
+        },
+        {
+          "path": "songci/ci.song.21000.json",
+          "sha256": "3344ba453ae7840339944ce29e4295b5b668d79f79210a99e6e1a58ee874dbc5",
+          "received": 50,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%AE%8B%E8%AF%8D/ci.song.21000.json"
+        }
+      ]
+    },
+    {
+      "label": "元曲",
+      "candidates": 674,
+      "selected": 350,
+      "authors": 152,
+      "files": [
+        {
+          "path": "yuanqu/yuanqu.json",
+          "sha256": "c2be37d2349cec99ec7f2d7c4107eb08bbb3ac869221db24531c8ffed2a88b12",
+          "received": 11057,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%85%83%E6%9B%B2/yuanqu.json"
+        }
+      ]
+    },
+    {
+      "label": "诗经",
+      "candidates": 288,
+      "selected": 240,
+      "authors": 1,
+      "files": [
+        {
+          "path": "shijing/shijing.json",
+          "sha256": "3c7ca54d59424542ada99adfcc85420287fbbd5c8a511e9baf705cb2b04051e7",
+          "received": 305,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E8%AF%97%E7%BB%8F/shijing.json"
+        }
+      ]
+    },
+    {
+      "label": "楚辞",
+      "candidates": 35,
+      "selected": 30,
+      "authors": 4,
+      "files": [
+        {
+          "path": "chuci/chuci.json",
+          "sha256": "5069e733d93781cecd55405c6d4699a7c17125b3f13cf79810d68792482e5b9b",
+          "received": 65,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E6%A5%9A%E8%BE%9E/chuci.json"
+        }
+      ]
+    },
+    {
+      "label": "古文观止",
+      "candidates": 167,
+      "selected": 100,
+      "authors": 42,
+      "files": [
+        {
+          "path": "mengxue/guwenguanzhi.json",
+          "sha256": "ba10ec02849d58bebcc8da575dda3da07a1123e2a31dab3f734acd95d48c5cac",
+          "received": 222,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E8%92%99%E5%AD%A6/guwenguanzhi.json"
+        }
+      ]
+    },
+    {
+      "label": "古文短章",
+      "candidates": 201,
+      "selected": 60,
+      "authors": 1,
+      "files": [
+        {
+          "path": "youmengying/youmengying.json",
+          "sha256": "02fe9f8d80ec2506e7b4b797953b15ed0145dc7ebacecab2798647ebff4419e4",
+          "received": 219,
+          "url": "https://github.com/chinese-poetry/chinese-poetry/blob/master/%E5%B9%BD%E6%A2%A6%E5%BD%B1/youmengying.json"
+        }
+      ]
+    }
+  ]
+}
