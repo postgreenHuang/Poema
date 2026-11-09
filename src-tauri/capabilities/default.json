@@ -1,6 +1,11 @@
 {
   "identifier": "main",
   "description": "Main Poema window",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open"
+  ]
 }

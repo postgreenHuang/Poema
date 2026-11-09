@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
 import { ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Compass, Download, ExternalLink, Feather, MessageCircle, Moon, Search, Send, Settings, Shuffle, Sparkles, X } from "lucide-react";
 import { chat, hasKey, saveKey, isDesktop, openSource, seekPoems } from "./ai";
 import type { FinderPick, FinderPlan } from "./finder";
@@ -142,6 +143,13 @@ export default function App() {
   function disconnectSync() {
     saveSyncFolder(""); setSyncFolder(""); setSyncReady(false); setSyncStatus("已停止同步；坚果云中的 Poema 文件未删除。");
   }
+  async function chooseSyncFolder() {
+    if (!isDesktop) return;
+    try {
+      const selected = await openFolderDialog({ directory: true, multiple: false, title: "选择坚果云在本机的同步文件夹" });
+      if (selected) { setSyncDraft(selected); setSyncStatus("文件夹已选好；点击“连接 / 立即同步”开始使用。"); }
+    } catch (error) { setSyncStatus(`打开文件夹选择器失败：${String(error)}`); }
+  }
   function updateTheme(key: ThemePart, value: string) { setThemeColors(old => ({ ...old, [key]: value })); }
   function openPoem(poem: Poem, fromPath = false) {
     if (fromPath) setPathHistory(old => [...old, current.id].slice(-30));
@@ -264,7 +272,7 @@ export default function App() {
       {page === "settings" && <div className="page-wrap settings-page">
         <div className="page-eyebrow">YOUR READING SPACE</div><h1 className="page-title">偏好与 AI</h1>
         <p className="page-description">诗笺默认保存在这台设备上；也可以用坚果云同步收藏、足迹与对话。配置兼容 Chat Completions 的模型后，可以开始持续共读。</p>
-        <section className="setting-card"><h2>坚果云 · 多设备诗笺</h2><p>先在每台电脑安装坚果云客户端，并让同一个文件夹同步到本机。填写这台电脑上的文件夹路径后，Poema 会在其中建立 Poema/devices，定期合并各设备的记录。</p><label>本机同步文件夹<input value={syncDraft} onChange={e => setSyncDraft(e.target.value)} placeholder="例如 D:\Nutstore\我的坚果云" disabled={!isDesktop}/></label><div className="sync-actions"><button className="primary-soft" onClick={connectSync} disabled={!isDesktop || !syncDraft.trim()}>连接 / 立即同步</button>{syncFolder && <button className="ghost-button" onClick={disconnectSync}>停止同步</button>}</div><p className="setting-notice">{isDesktop ? (syncStatus || (syncFolder ? `已连接：${syncFolder}` : "尚未连接同步文件夹。")) : "浏览器预览不支持文件夹同步，请使用桌面版。"}</p><p className="sync-warning">同步文件包含明文收藏、笔记、浏览记录和共读对话；API Key 不会同步。请选择仅自己可访问的文件夹。</p></section>
+        <section className="setting-card"><h2>坚果云 · 多设备诗笺</h2><p>先在每台电脑安装坚果云客户端，并让同一个文件夹同步到本机。选择这台电脑上的同步文件夹后，Poema 会在其中建立 Poema/devices，定期合并各设备的记录。</p><label>本机同步文件夹<div className="sync-folder-row"><input value={syncDraft} onChange={e => setSyncDraft(e.target.value)} placeholder="例如 D:\Nutstore\我的坚果云" disabled={!isDesktop}/><button type="button" className="outline-button" onClick={() => void chooseSyncFolder()} disabled={!isDesktop}>选择文件夹</button></div></label><div className="sync-actions"><button className="primary-soft" onClick={connectSync} disabled={!isDesktop || !syncDraft.trim()}>连接 / 立即同步</button>{syncFolder && <button className="ghost-button" onClick={disconnectSync}>停止同步</button>}</div><p className="setting-notice">{isDesktop ? (syncStatus || (syncFolder ? `已连接：${syncFolder}` : "尚未连接同步文件夹。")) : "浏览器预览不支持文件夹同步，请使用桌面版。"}</p><p className="sync-warning">同步文件包含明文收藏、笔记、浏览记录和共读对话；API Key 不会同步。请选择仅自己可访问的文件夹。</p></section>
         <section className="setting-card"><h2>为阅读调一盏灯</h2><p>从一套色调开始，再逐项调整页面、卡片、文字与按钮。更改即时生效，并只保存在这台设备上。</p><div className="theme-presets">{themePresets.map(preset => <button key={preset.name} className={themeParts.every(part => themeColors[part.key].toLowerCase() === preset.colors[part.key].toLowerCase()) ? "active" : ""} onClick={() => setThemeColors({ ...preset.colors })}>{preset.name}</button>)}</div><div className="theme-grid">{themeParts.map(part => <ThemeControl key={part.key} part={part} value={themeColors[part.key]} onChange={updateTheme}/>)}</div><button className="ghost-button theme-reset" onClick={() => setThemeColors({ ...defaultTheme })}>恢复默认色彩</button></section>
         <section className="setting-card"><h2>共读模型</h2><p>桌面版密钥保存到系统凭据库；浏览器预览只保留在当前会话。发送问题时会附上当前作品的原文和本篇最近的对话。</p><label>服务地址<input value={library.aiBaseUrl} onChange={e => update({ aiBaseUrl: e.target.value })} placeholder="https://api.openai.com/v1"/></label><label>模型名称<input value={library.aiModel} onChange={e => update({ aiModel: e.target.value })} placeholder="填写服务商提供的模型 ID"/></label><label>API Key <span className="key-status">{keyReady ? "已配置" : "未配置"}</span><input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={keyReady ? "输入新密钥可替换" : "输入密钥"}/></label><button className="primary-soft" onClick={storeKey}>保存密钥</button>{keyReady && <button className="clear-key" onClick={clearKey}>清除已存密钥</button>}{settingsNotice && <p className="setting-notice">{settingsNotice}</p>}</section>
         <section className="setting-card"><h2>关于文本与来源</h2><p>当前内置 {poems.length} 篇公版作品，含诗、词、曲、《诗经》、楚辞与古文。英文原文来自 PoetryDB；中文扩充文本来自 chinese-poetry，均保留来源链接。中文自动转写文本尚未逐篇校勘。</p><p>本地诗笺和历史不会自动发送给模型。共读时发送当前作品、选句和本篇最近的对话；AI 寻诗时发送你的需求及最多 32 篇本地候选的题名、作者、主题标签和首句。</p><p className="license-credit">Poetry data from <button className="inline-link" onClick={() => openSource("https://poetrydb.org")}>PoetryDB</button>, licensed under CC BY 4.0.</p></section>

@@ -141,6 +141,7 @@ fn write_sync_snapshot(folder: String, device_id: String, payload: Value) -> Res
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, open_external, read_sync_snapshots, write_sync_snapshot])
         .run(tauri::generate_context!())

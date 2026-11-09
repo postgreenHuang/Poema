@@ -14,3 +14,4 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 tokio = { version = "1", features = ["time"] }
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
