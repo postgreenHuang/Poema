@@ -64,7 +64,7 @@ export function candidatePoems(poems: Poem[], plan: FinderPlan, seenIds: string[
   return distinct.map(item => item.poem);
 }
 
-export function verifiedPicks(raw: unknown, candidates: Poem[], count = 6): FinderPick[] {
+export function verifiedPicks(raw: unknown, candidates: { id: string }[], count = 6): FinderPick[] {
   const ids = new Set(candidates.map(poem => poem.id));
   const picks = raw && typeof raw === "object" && Array.isArray((raw as { picks?: unknown }).picks) ? (raw as { picks: unknown[] }).picks : [];
   const seen = new Set<string>();

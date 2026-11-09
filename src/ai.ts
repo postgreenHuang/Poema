@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Message, Poem } from "./domain";
 import { candidatePoems, normalizeFinderPlan, verifiedPicks, type FinderPick, type FinderPlan } from "./finder";
+import { searchOnlineSources } from "./online";
 
 export const isDesktop = "__TAURI_INTERNALS__" in window;
 
@@ -41,13 +42,17 @@ function parseJson(answer: string): unknown {
   catch { throw new Error("模型未按约定返回寻诗计划，请再试一次"); }
 }
 
-export async function seekPoems(args: { baseUrl: string; model: string; request: string; poems: Poem[]; seenIds: string[]; onPlan?: (plan: FinderPlan) => void }) {
-  const { baseUrl, model, request, poems, seenIds, onPlan } = args;
+async function interpretRequest(baseUrl: string, model: string, request: string): Promise<FinderPlan> {
   const planAnswer = await complete(baseUrl, model, [
-    { role: "system", content: "你是一位谨慎而富有文学感受力的寻诗向导。把用户需求转成检索计划，只输出 JSON 对象，不要 Markdown。字段：interpretation（简短中文理解）、terms（0-8 个可在题名作者原文中检索的具体词，不要自造诗句）、genres（诗/词/曲/诗经/楚辞/古文的数组）、language（all/zh/en）、themes（moon/rain/journey/nature/parting/time/solitude/hope 的数组）、excludeThemes（同前）、mood（all/lighter/darker）、short（布尔）。不要把用户没有提出的文体或语言变成硬限制。" },
+    { role: "system", content: "你是一位谨慎而富有文学感受力的寻诗向导。把用户需求转成检索计划，只输出 JSON 对象，不要 Markdown。字段：interpretation（简短中文理解）、terms（0-8 个可在题名作者原文中检索的具体检索词；中文写中文词，英文写英文词，不要自造诗句）、genres（诗/词/曲/诗经/楚辞/古文的数组）、language（all/zh/en）、themes（moon/rain/journey/nature/parting/time/solitude/hope 的数组）、excludeThemes（同前）、mood（all/lighter/darker）、short（布尔）。不要把用户没有提出的文体或语言变成硬限制。" },
     { role: "user", content: request },
   ]);
-  const plan = normalizeFinderPlan(parseJson(planAnswer));
+  return normalizeFinderPlan(parseJson(planAnswer));
+}
+
+export async function seekPoems(args: { baseUrl: string; model: string; request: string; poems: Poem[]; seenIds: string[]; onPlan?: (plan: FinderPlan) => void }) {
+  const { baseUrl, model, request, poems, seenIds, onPlan } = args;
+  const plan = await interpretRequest(baseUrl, model, request);
   onPlan?.(plan);
   const candidates = candidatePoems(poems, plan, seenIds, 32, request);
   if (!candidates.length) return { plan, picks: [] as FinderPick[], candidates };
@@ -58,6 +63,23 @@ export async function seekPoems(args: { baseUrl: string; model: string; request:
   ]);
   const picks = verifiedPicks(parseJson(selectionAnswer), candidates);
   return { plan, picks: picks.length ? picks : candidates.slice(0, 6).map(poem => ({ id: poem.id, reason: "这篇作品与所述意象或心绪相近，值得从原文读起。" })), candidates };
+}
+
+export async function seekOnlinePoems(args: { baseUrl: string; model: string; request: string; onPlan?: (plan: FinderPlan) => void }) {
+  const { baseUrl, model, request, onPlan } = args;
+  const plan = await interpretRequest(baseUrl, model, request);
+  onPlan?.(plan);
+  const { items, warnings } = await searchOnlineSources(plan, request);
+  if (!items.length) return { plan, items, picks: [] as FinderPick[], warnings };
+  const candidates = items.map(item => `${item.id}｜${item.title}｜${item.author || "作者待来源页核对"}｜${item.sourceName}｜摘要:${item.excerpt}`).join("\n");
+  const selectionAnswer = await complete(baseUrl, model, [
+    { role: "system", content: "你是谨慎的寻诗向导。候选来自实时诗歌来源，但中文候选可能只是搜索摘要，未核对作者、完整正文、版本或权利。只可从候选 ID 中选最多 6 项；不可编造诗句、作者、背景、版权或未展示的正文。优先相关且多样的作品。只输出 JSON：{\"picks\":[{\"id\":\"候选 ID\",\"reason\":\"根据题名或摘要写一句审慎的中文推荐理由\"}]}。" },
+    { role: "user", content: `用户需求：${request}\n理解：${plan.interpretation}\n实时来源候选：\n${candidates}` },
+  ]);
+  let picks: FinderPick[] = [];
+  try { picks = verifiedPicks(parseJson(selectionAnswer), items); }
+  catch { warnings.push("AI 未返回可解析的候选，以下是来源检索结果"); }
+  return { plan, items, picks: picks.length ? picks : items.slice(0, 6).map(item => ({ id: item.id, reason: "实时来源中的相关线索，请到原站核对全文与版本。" })), warnings };
 }
 
 export async function chat(args: { baseUrl: string; model: string; poem: Poem; selectedLine?: string; messages: Message[]; signal?: AbortSignal }) {

@@ -72,6 +72,38 @@ async fn ai_chat(base_url: String, payload: Value) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn search_public_source(source: String, term: String) -> Result<Value, String> {
+    let term = term.trim();
+    if term.chars().count() > 80 || source != "wikisource" && source != "poetrydb" {
+        return Err("在线检索参数无效".into());
+    }
+    if source == "wikisource" && term.is_empty() { return Err("维基文库需要检索词".into()); }
+    let url = if source == "wikisource" {
+        let mut url = Url::parse("https://zh.wikisource.org/w/api.php").map_err(|e| e.to_string())?;
+        url.query_pairs_mut()
+            .append_pair("action", "query").append_pair("list", "search")
+            .append_pair("srsearch", term).append_pair("srnamespace", "0")
+            .append_pair("srlimit", "12").append_pair("srprop", "snippet|wordcount")
+            .append_pair("format", "json").append_pair("formatversion", "2");
+        url
+    } else if term.is_empty() {
+        Url::parse("https://poetrydb.org/linecount,random/-100;8").map_err(|e| e.to_string())?
+    } else {
+        let mut url = Url::parse("https://poetrydb.org/lines,linecount,random/").map_err(|e| e.to_string())?;
+        url.path_segments_mut().map_err(|_| "英文诗接口地址无效".to_string())?.push(&format!("{term};-100;12"));
+        url
+    };
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(18))
+        .user_agent("Poema/0.1 (https://github.com/postgreenHuang/Poema)")
+        .build().map_err(|e| e.to_string())?;
+    let response = client.get(url.as_str()).send().await.map_err(|e| format!("在线诗源连接失败：{e}"))?;
+    if !response.status().is_success() { return Err(format!("在线诗源返回 {}", response.status())); }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > 1_500_000 { return Err("在线诗源返回过多内容".into()); }
+    serde_json::from_slice(&bytes).map_err(|_| "在线诗源响应无法解析".into())
+}
+
+#[tauri::command]
 fn open_external(url: String, app: tauri::AppHandle) -> Result<(), String> {
     let parsed = Url::parse(&url).map_err(|_| "来源链接无效".to_string())?;
     if parsed.scheme() != "https" || !parsed.username().is_empty() || parsed.password().is_some() {
@@ -143,7 +175,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, open_external, read_sync_snapshots, write_sync_snapshot])
+        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, search_public_source, open_external, read_sync_snapshots, write_sync_snapshot])
         .run(tauri::generate_context!())
         .expect("Poema 启动失败");
 }
