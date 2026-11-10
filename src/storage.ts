@@ -1,4 +1,4 @@
-import type { Message, Note } from "./domain";
+import type { Message, Note, Poem } from "./domain";
 
 export interface ReadEvent { id: string; poemId: string; viewedAt: string }
 export interface SavedChange { saved: boolean; at: string; deviceId: string }
@@ -10,6 +10,7 @@ export interface Library {
   seenIds: string[];
   readHistory: ReadEvent[];
   conversations: Record<string, Message[]>;
+  onlinePoems: Record<string, Poem>;
   lastPoemId?: string;
   aiBaseUrl: string;
   aiModel: string;
@@ -18,7 +19,7 @@ export interface Library {
 const key = "poema.library.v1";
 const syncKey = "poema.sync.folder.v1";
 const deviceKey = "poema.device.id.v1";
-const defaults: Library = { version: 1, savedIds: [], savedChanges: {}, notes: [], seenIds: [], readHistory: [], conversations: {}, aiBaseUrl: "https://api.openai.com/v1", aiModel: "" };
+const defaults: Library = { version: 1, savedIds: [], savedChanges: {}, notes: [], seenIds: [], readHistory: [], conversations: {}, onlinePoems: {}, aiBaseUrl: "https://api.openai.com/v1", aiModel: "" };
 
 export function getDeviceId() {
   let id = localStorage.getItem(deviceKey);
@@ -48,8 +49,15 @@ export function normalizeLibrary(raw: unknown): Library {
       conversations[id] = items.filter((message): message is Message => !!message && (message.role === "user" || message.role === "assistant") && typeof message.content === "string" && typeof message.createdAt === "string");
     }
   }
+  const onlinePoems: Record<string, Poem> = {};
+  if (value.onlinePoems && typeof value.onlinePoems === "object") for (const [id, poem] of Object.entries(value.onlinePoems)) {
+    if (!poem || !/^wikisource:\d+$|^poetrydb:/.test(id) || poem.id !== id || typeof poem.title !== "string" || typeof poem.author !== "string" || !Array.isArray(poem.lines) || poem.lines.length > 120 || !poem.lines.every(line => typeof line === "string" && line.length <= 500) || poem.rights?.status !== "source_unverified") continue;
+    try { const url = new URL(poem.sourceUrl); if (url.protocol !== "https:" || !["zh.wikisource.org", "poetrydb.org"].includes(url.hostname)) continue; }
+    catch { continue; }
+    onlinePoems[id] = poem;
+  }
   return {
-    ...defaults, savedIds, savedChanges, seenIds, readHistory, conversations,
+    ...defaults, savedIds, savedChanges, seenIds, readHistory, conversations, onlinePoems,
     notes: Array.isArray(value.notes) ? value.notes.filter((note): note is Note => !!note && typeof note.poemId === "string" && typeof note.text === "string" && typeof note.savedAt === "string") : [],
     lastPoemId: typeof value.lastPoemId === "string" ? value.lastPoemId : undefined,
     aiBaseUrl: typeof value.aiBaseUrl === "string" ? value.aiBaseUrl : defaults.aiBaseUrl,
@@ -92,13 +100,18 @@ export function mergeLibraries(local: Library, remote: unknown): Library {
     const messages = [...(a.conversations[id] || []), ...(b.conversations[id] || [])];
     conversations[id] = [...new Map(messages.map(message => [messageKey(message), message])).values()].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || messageKey(x).localeCompare(messageKey(y)));
   }
-  const merged = { ...a, savedIds, savedChanges, notes, seenIds, readHistory, conversations, lastPoemId: readHistory.find(event => event.viewedAt)?.poemId || a.lastPoemId || b.lastPoemId };
+  const onlinePoems = { ...a.onlinePoems };
+  for (const [id, poem] of Object.entries(b.onlinePoems)) {
+    const existing = onlinePoems[id];
+    if (!existing || (poem.previewStatus === "full" && existing.previewStatus !== "full") || (poem.previewStatus === existing.previewStatus && poem.lines.join("").length > existing.lines.join("").length)) onlinePoems[id] = poem;
+  }
+  const merged = { ...a, savedIds, savedChanges, notes, seenIds, readHistory, conversations, onlinePoems, lastPoemId: readHistory.find(event => event.viewedAt)?.poemId || a.lastPoemId || b.lastPoemId };
   return JSON.stringify(merged) === JSON.stringify(local) ? local : merged;
 }
 
 export function syncSnapshot(library: Library) {
-  const { version, savedIds, savedChanges, notes, seenIds, readHistory, conversations, lastPoemId } = library;
-  return { version, savedIds, savedChanges, notes, seenIds, readHistory, conversations, lastPoemId };
+  const { version, savedIds, savedChanges, notes, seenIds, readHistory, conversations, onlinePoems, lastPoemId } = library;
+  return { version, savedIds, savedChanges, notes, seenIds, readHistory, conversations, onlinePoems, lastPoemId };
 }
 
 export function exportLibrary(library: Library) {

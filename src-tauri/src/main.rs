@@ -104,6 +104,22 @@ async fn search_public_source(source: String, term: String) -> Result<Value, Str
 }
 
 #[tauri::command]
+async fn read_wikisource_page(page_id: u64) -> Result<Value, String> {
+    if page_id == 0 { return Err("作品页面标识无效".into()); }
+    let mut url = Url::parse("https://zh.wikisource.org/w/api.php").map_err(|e| e.to_string())?;
+    url.query_pairs_mut().append_pair("action", "parse").append_pair("pageid", &page_id.to_string())
+        .append_pair("prop", "text").append_pair("format", "json").append_pair("formatversion", "2");
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(20))
+        .user_agent("Poema/0.1 (https://github.com/postgreenHuang/Poema)")
+        .build().map_err(|e| e.to_string())?;
+    let response = client.get(url).send().await.map_err(|e| format!("读取维基文库页面失败：{e}"))?;
+    if !response.status().is_success() { return Err(format!("维基文库返回 {}", response.status())); }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > 2_000_000 { return Err("来源页面过长，暂不支持站内预览".into()); }
+    serde_json::from_slice(&bytes).map_err(|_| "来源页面无法解析".into())
+}
+
+#[tauri::command]
 fn open_external(url: String, app: tauri::AppHandle) -> Result<(), String> {
     let parsed = Url::parse(&url).map_err(|_| "来源链接无效".to_string())?;
     if parsed.scheme() != "https" || !parsed.username().is_empty() || parsed.password().is_some() {
@@ -175,7 +191,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, search_public_source, open_external, read_sync_snapshots, write_sync_snapshot])
+        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, search_public_source, read_wikisource_page, open_external, read_sync_snapshots, write_sync_snapshot])
         .run(tauri::generate_context!())
         .expect("Poema 启动失败");
 }

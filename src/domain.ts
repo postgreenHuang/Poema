@@ -17,8 +17,9 @@ export interface Poem {
   mood: number;
   sourceUrl: string;
   sourceName: string;
-  rights: { status: "public_domain"; basis: string; textCredit?: string };
+  rights: { status: "public_domain" | "source_unverified"; basis: string; textCredit?: string };
   quality?: "curated" | "imported";
+  previewStatus?: "full" | "excerpt";
 }
 export interface Note { poemId: string; line?: string; text: string; savedAt: string }
 export interface Message { id?: string; role: "user" | "assistant"; content: string; createdAt: string }

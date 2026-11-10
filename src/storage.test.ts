@@ -31,4 +31,13 @@ describe("library migration and multi-device merge", () => {
     expect(snapshot).not.toHaveProperty("aiBaseUrl");
     expect(snapshot).not.toHaveProperty("aiModel");
   });
+
+  it("retains a full online text when another device only has an excerpt", () => {
+    const base = { id: "wikisource:12949", title: "夜雨寄北", author: "李商隱", era: "在线来源", language: "zh", genre: "诗", form: "维基文库", themes: [], mood: 3, sourceName: "维基文库", sourceUrl: "https://zh.wikisource.org/wiki/夜雨寄北", rights: { status: "source_unverified", basis: "未校勘" } };
+    const excerpt = normalizeLibrary({ onlinePoems: { [base.id]: { ...base, lines: ["巴山夜雨漲秋池"], previewStatus: "excerpt" } } });
+    const full = normalizeLibrary({ onlinePoems: { [base.id]: { ...base, lines: ["君問歸期未有期", "巴山夜雨漲秋池"], previewStatus: "full" } } });
+    expect(mergeLibraries(full, excerpt).onlinePoems[base.id].previewStatus).toBe("full");
+    expect(mergeLibraries(excerpt, full).onlinePoems[base.id].lines).toHaveLength(2);
+    expect(syncSnapshot(full).onlinePoems[base.id].title).toBe("夜雨寄北");
+  });
 });
