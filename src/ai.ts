@@ -87,3 +87,13 @@ export async function chat(args: { baseUrl: string; model: string; poem: Poem; s
   const system = `你是一位谦逊、敏锐的古典文学共读者。只依据下方作品的已知文本回答。区分文本可见、历史事实与个人解读；无资料时不要编造作者生平、写作背景、译者或版本事实。允许多义，不要强行总结中心思想。回答简洁而具体，优先从具体文句出发。不要续写或声称未给出的文句属于原作。${poem.previewStatus ? `这是一篇在线来源文本，当前仅有${poem.previewStatus === "excerpt" ? "搜索摘要，绝不可称为全文" : "网页解析文本，尚未校勘"}；作者、版本和权利未核验。` : ""}\n作品：${poem.title}；作者：${poem.author}；时代：${poem.era}；文体：${poem.form}。\n${poem.previewStatus === "excerpt" ? "来源摘要" : "原文"}：\n${poem.lines.map((line, i) => `${i + 1}. ${line}`).join("\n")}\n${selectedLine ? `用户选中的文句：${selectedLine}` : ""}`;
   return complete(baseUrl, model, [{ role: "system", content: system }, ...messages.slice(-12).map(m => ({ role: m.role, content: m.content }))], signal);
 }
+
+export async function lookupWord(args: { baseUrl: string; model: string; poem: Poem; term: string; context?: string }) {
+  const { baseUrl, model, poem, context } = args;
+  const term = args.term.trim().slice(0, 60);
+  if (!term) throw new Error("请输入想查询的字或词语");
+  return complete(baseUrl, model, [
+    { role: "system", content: "你是一位审慎的中英文诗歌词典助手。只回答指定字词，不做整首赏析。先给读音：中文标拼音（含声调），英文标 IPA；有异读须结合给出的原句说明，不确定时明确说不确定，不可编造。再用简洁中文解释它在当前文句中的含义；若只是来源摘要，勿推断未展示的上下文。只输出读音与释义，不要假装提供了真人发音。" },
+    { role: "user", content: `查询：${term}\n作品：${poem.title}（${poem.language === "zh" ? "中文" : "英文"}）\n原句：${(context || poem.lines.find(line => line.includes(term)) || "未指定").slice(0, 240)}` },
+  ]);
+}
