@@ -51,8 +51,8 @@ export function normalizeLibrary(raw: unknown): Library {
   }
   const onlinePoems: Record<string, Poem> = {};
   if (value.onlinePoems && typeof value.onlinePoems === "object") for (const [id, poem] of Object.entries(value.onlinePoems)) {
-    if (!poem || !/^wikisource:\d+$|^poetrydb:/.test(id) || poem.id !== id || typeof poem.title !== "string" || typeof poem.author !== "string" || !Array.isArray(poem.lines) || poem.lines.length > 120 || !poem.lines.every(line => typeof line === "string" && line.length <= 500) || poem.rights?.status !== "source_unverified") continue;
-    try { const url = new URL(poem.sourceUrl); if (url.protocol !== "https:" || !["zh.wikisource.org", "poetrydb.org"].includes(url.hostname)) continue; }
+    if (!poem || !/^(?:wikisource:\d+|poetrydb:.+|poetryspring:[0-9a-f]{16})$/.test(id) || poem.id !== id || typeof poem.title !== "string" || typeof poem.author !== "string" || !Array.isArray(poem.lines) || poem.lines.length > 120 || !poem.lines.every(line => typeof line === "string" && line.length <= 500) || poem.rights?.status !== "source_unverified") continue;
+    try { const url = new URL(poem.sourceUrl); if (url.protocol !== "https:" || !["zh.wikisource.org", "poetrydb.org", "poetry.palemoky.com"].includes(url.hostname)) continue; }
     catch { continue; }
     onlinePoems[id] = poem;
   }

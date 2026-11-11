@@ -3,7 +3,7 @@ import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
 import { ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Compass, Download, ExternalLink, Feather, MessageCircle, Moon, Search, Send, Settings, Shuffle, Sparkles, X } from "lucide-react";
 import { chat, hasKey, saveKey, isDesktop, lookupWord, openSource, seekPoems, seekOnlinePoems } from "./ai";
 import type { FinderPick, FinderPlan } from "./finder";
-import { previewOnlinePoem, type OnlinePoem } from "./online";
+import { previewOnlinePoem, randomPoetrySpring, searchPoetrySpring, type OnlinePoem } from "./online";
 import { chooseNext, genreLabels, genreOf, relatedPoems, searchPoems, themeLabels, type Genre, type Language, type Message, type PathKind, type Poem, type Theme } from "./domain";
 import { poems } from "./catalog";
 import { exportLibrary, getDeviceId, loadLibrary, loadSyncFolder, mergeLibraries, recordVisit, saveLibrary, saveSyncFolder, setSaved, type Library } from "./storage";
@@ -61,13 +61,20 @@ export default function App() {
   const [historyLimit, setHistoryLimit] = useState(12);
   const [seekBusy, setSeekBusy] = useState(false);
   const [seekError, setSeekError] = useState("");
+  const [seekNotice, setSeekNotice] = useState("");
   const [seekPlan, setSeekPlan] = useState<FinderPlan>();
   const [seekPicks, setSeekPicks] = useState<FinderPick[]>([]);
   const [seekMode, setSeekMode] = useState<"online" | "local">("online");
   const [onlineItems, setOnlineItems] = useState<OnlinePoem[]>([]);
   const [onlineWarnings, setOnlineWarnings] = useState<string[]>([]);
+  const [directOnlineItems, setDirectOnlineItems] = useState<OnlinePoem[]>([]);
+  const [directOnlineBusy, setDirectOnlineBusy] = useState(false);
+  const [directOnlineError, setDirectOnlineError] = useState("");
+  const [directOnlineQuery, setDirectOnlineQuery] = useState("");
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [previewWarning, setPreviewWarning] = useState("");
+  const [outsideBusy, setOutsideBusy] = useState(false);
+  const [outsideError, setOutsideError] = useState("");
   const [seekRequest, setSeekRequest] = useState("");
   const [refineDraft, setRefineDraft] = useState("");
   const [rightsOpen, setRightsOpen] = useState(false);
@@ -170,7 +177,7 @@ export default function App() {
   function updateTheme(key: ThemePart, value: string) { setThemeColors(old => ({ ...old, [key]: value })); }
   function openPoem(poem: Poem, fromPath = false) {
     if (fromPath) setPathHistory(old => [...old, current.id].slice(-30));
-    setPreviewWarning(""); setLookupSelection(""); setLookupOpen(false);
+    setPreviewWarning(""); setOutsideError(""); setLookupSelection(""); setLookupOpen(false);
     setCurrentId(poem.id); setSelectedLine(undefined); setRightsOpen(false); setError(""); setPage("today");
     setLibrary(old => recordVisit(old, poem.id));
     window.scrollTo(0, 0);
@@ -188,17 +195,32 @@ export default function App() {
     finally { setLookupBusy(false); }
   }
   async function openOnlinePreview(item: OnlinePoem) {
-    if (previewLoadingId) return;
+    if (previewLoadingId) return false;
     const cached = library.onlinePoems[item.id];
-    if (cached?.previewStatus === "full") { setPreviewWarning(""); openPoem(cached); return; }
+    if (cached?.previewStatus === "full") { setPreviewWarning(""); openPoem(cached); return true; }
     setPreviewLoadingId(item.id);
     try {
       const { poem, warning } = await previewOnlinePoem(item);
       setLibrary(old => ({ ...old, onlinePoems: { ...old.onlinePoems, [poem.id]: poem } }));
       openPoem(poem);
       setPreviewWarning(warning || "");
-    } catch (error) { setSeekError(`预览失败：${String(error)}；仍可从卡片打开原始出处。`); }
+      return true;
+    } catch (error) { const message = `预览失败：${String(error)}；仍可从卡片打开原始出处。`; setSeekError(message); setDirectOnlineError(message); return false; }
     finally { setPreviewLoadingId(""); }
+  }
+  async function outsidePoem() {
+    if (outsideBusy || previewLoadingId) return;
+    setOutsideBusy(true); setOutsideError("");
+    try { if (!await openOnlinePreview(await randomPoetrySpring(library.seenIds))) throw new Error("馆外作品暂不可预览"); }
+    catch { openPoem(chooseNext(poems, library.seenIds, current.id)); setOutsideError("馆外暂不可达，先在本地诗库与你再遇一篇。"); }
+    finally { setOutsideBusy(false); }
+  }
+  async function searchOutside() {
+    if (directOnlineBusy || !query.trim()) return;
+    setDirectOnlineBusy(true); setDirectOnlineError(""); setDirectOnlineItems([]); setDirectOnlineQuery(query.trim());
+    try { setDirectOnlineItems(await searchPoetrySpring(query, poems)); }
+    catch (error) { setDirectOnlineError(`馆外搜索暂不可用：${String(error)}。本地结果仍可阅读。`); }
+    finally { setDirectOnlineBusy(false); }
   }
   function nextPoem() { openPoem(chooseNext(poems, library.seenIds, current.id)); }
   function toggleSaved() { setLibrary(old => setSaved(old, current.id, !old.savedIds.includes(current.id))); }
@@ -226,13 +248,16 @@ export default function App() {
   async function seek(request = query) {
     const text = request.trim();
     if (!text || seekBusy) return;
-    setQuery(text); setSeekRequest(text); setSeekError(""); setSeekPicks([]); setOnlineItems([]); setOnlineWarnings([]); setSeekPlan(undefined); setSeekBusy(true);
+    setQuery(text); setDirectOnlineItems([]); setDirectOnlineQuery(""); setDirectOnlineError(""); setSeekRequest(text); setSeekError(""); setSeekNotice(""); setSeekPicks([]); setOnlineItems([]); setOnlineWarnings([]); setSeekPlan(undefined); setSeekBusy(true);
     try {
       if (!keyReady) throw new Error("请先在偏好与 AI 中配置 API Key");
       if (seekMode === "online") {
-        const found = await seekOnlinePoems({ baseUrl: library.aiBaseUrl, model: library.aiModel, request: text, onPlan: setSeekPlan });
-        setOnlineItems(found.items); setOnlineWarnings(found.warnings); setSeekPicks(found.picks);
-        if (!found.picks.length) setSeekError("在线诗源没有返回可核对的推荐。试着换一个具体意象或作者，或改用本地文库。");
+        const found = await seekOnlinePoems({ baseUrl: library.aiBaseUrl, model: library.aiModel, request: text, localPoems: poems, onPlan: setSeekPlan });
+        if (!found.items.length) {
+          const fallback = await seekPoems({ baseUrl: library.aiBaseUrl, model: library.aiModel, request: text, poems, seenIds: library.seenIds, onPlan: setSeekPlan });
+          setSeekMode("local"); setSeekNotice("馆外暂未找到可核对的候选，已回到本地诗库。"); setSeekPicks(fallback.picks);
+          if (!fallback.picks.length) setSeekError("本地诗库也暂未找到合适作品，试着换一个具体意象或作者。");
+        } else { setOnlineItems(found.items); setOnlineWarnings(found.warnings); setSeekPicks(found.picks); }
       } else {
         const found = await seekPoems({ baseUrl: library.aiBaseUrl, model: library.aiModel, request: text, poems, seenIds: library.seenIds, onPlan: setSeekPlan });
         setSeekPicks(found.picks);
@@ -277,8 +302,9 @@ export default function App() {
           <section className="reader-main">
             {pathHistory.length > 0 && <button className="text-button back-path" onClick={() => { const prev = pathHistory[pathHistory.length - 1]; setPathHistory(pathHistory.slice(0, -1)); openPoem(poems.find(p => p.id === prev) || library.onlinePoems[prev] || first); }}><ArrowLeft size={15}/> 回到上一首</button>}
             <div className="chapter-label"><span className="chapter-line"/> {isOnline ? "从在线诗源读到这里" : "今日与你相遇的诗"} <span className="chapter-line"/></div>
+            <div className="outside-discovery"><button onClick={() => void outsidePoem()} disabled={outsideBusy || !!previewLoadingId}><Compass size={15}/>{outsideBusy ? "正在馆外寻诗…" : "走出书架 · 遇见一篇小众诗文"}</button>{outsideError && <small>{outsideError}</small>}</div>
             <div className="poem-heading"><div className="meta-line">{current.language === "zh" ? genreOf(current) : "ENGLISH POETRY"} <span>·</span> {current.era} <span>·</span> {current.form}</div><h1>{current.title}</h1><p>{current.author}</p></div>
-            {isOnline && <div className="online-reading-notice">{current.previewStatus === "excerpt" ? "这里只是来源搜索摘要，不是全文；共读也只依据这段摘要。" : "正文由在线来源解析，尚未人工校勘；请到原站核对异文、作者、版本与权利。"}{previewWarning && <small>{previewWarning}</small>}</div>}
+            {isOnline && <div className="online-reading-notice">{current.previewStatus === "excerpt" ? "这里只是来源搜索摘要，不是全文；共读也只依据这段摘要。" : "正文来自在线诗源，尚未人工校勘；请到原站核对异文、作者、版本与权利。"}{previewWarning && <small>{previewWarning}</small>}</div>}
             <PoemBody poem={current} selectedLine={selectedLine} onSelect={setSelectedLine} onSelectText={setLookupSelection}/>
             {lookupSelection && <div className="line-hint"><Search size={15}/> 已选中「{lookupSelection}」<button onClick={openLookup}>查词与读音 <ArrowRight size={14}/></button></div>}
             {selectedLine && <div className="line-hint"><Sparkles size={15}/> 已点亮「{selectedLine}」<button onClick={() => { setPage("chat"); setDraft("这一句可以怎样读？"); }}>谈谈这一句 <ArrowRight size={14}/></button></div>}
@@ -292,12 +318,13 @@ export default function App() {
         <div className="page-eyebrow">FIND YOUR TEXT</div>
         <h1 className="page-title">你想遇见怎样的文字？</h1>
         <p className="page-description">诗、词、曲、歌赋与古文，一个词、一位作者、一句记得不完整的话，都可以从这里开始。</p>
-        <div className="search-box"><Search size={21}/><input value={query} onChange={e => setQuery(e.target.value)} placeholder="试试：写雨但不悲伤的短诗、诗经、王维、night..." autoFocus/>{query && <button onClick={() => setQuery("")} title="清空"><X size={17}/></button>}</div>
-        <div className="ai-seek"><div><span className="page-eyebrow">POEMA AS YOUR GUIDE</span><h2>说出一种心绪，让 AI 替你寻诗</h2><p>{seekMode === "online" ? "联网查询维基文库与 PoetryDB，AI 只在可打开的真实来源中推荐；库外作品会带你回到原站核对。" : "在本地文库中挖掘小众作品，核对作品 ID 后给出具体理由。"}</p><div className="seek-mode"><button className={seekMode === "online" ? "active" : ""} disabled={seekBusy} onClick={() => { setSeekMode("online"); setSeekPicks([]); setSeekPlan(undefined); setSeekError(""); }}>联网发现</button><button className={seekMode === "local" ? "active" : ""} disabled={seekBusy} onClick={() => { setSeekMode("local"); setSeekPicks([]); setSeekPlan(undefined); setSeekError(""); }}>本地诗库</button></div></div><button className="primary-soft" onClick={() => void seek()} disabled={seekBusy || !query.trim()}><Sparkles size={16}/>{seekBusy ? "正在寻诗…" : "请 AI 寻诗"}</button></div>
+        <div className="search-box"><Search size={21}/><input value={query} onChange={e => { setQuery(e.target.value); setDirectOnlineItems([]); setDirectOnlineQuery(""); setDirectOnlineError(""); }} placeholder="试试：写雨但不悲伤的短诗、诗经、王维、night..." autoFocus/>{query && <button onClick={() => setQuery("")} title="清空"><X size={17}/></button>}</div>
+        <div className="ai-seek"><div><span className="page-eyebrow">POEMA AS YOUR GUIDE</span><h2>说出一种心绪，让 AI 替你寻诗</h2><p>{seekMode === "online" ? "联网查询诗泉、维基文库与 PoetryDB，AI 只在可打开的真实来源中推荐；库外作品可站内阅读，并可回到原站核对。" : "在本地文库中挖掘小众作品，核对作品 ID 后给出具体理由。"}</p><div className="seek-mode"><button className={seekMode === "online" ? "active" : ""} disabled={seekBusy} onClick={() => { setSeekMode("online"); setSeekPicks([]); setSeekPlan(undefined); setSeekError(""); setSeekNotice(""); }}>联网发现</button><button className={seekMode === "local" ? "active" : ""} disabled={seekBusy} onClick={() => { setSeekMode("local"); setSeekPicks([]); setSeekPlan(undefined); setSeekError(""); setSeekNotice(""); }}>本地诗库</button></div></div><button className="primary-soft" onClick={() => void seek()} disabled={seekBusy || !query.trim()}><Sparkles size={16}/>{seekBusy ? "正在寻诗…" : "请 AI 寻诗"}</button></div>
         <div className="seek-prompts"><span>也可以从这里开始</span>{["想读一篇写孤独，却不自怜的短诗", "找一首不太有名的宋词，带一点夜色", "想念故乡，但不想太伤感"].map(prompt => <button key={prompt} onClick={() => void seek(prompt)} disabled={seekBusy}>{prompt} <ArrowRight size={13}/></button>)}</div>
-        {(seekPlan || seekBusy || seekError || seekPicks.length > 0) && <section className="seek-result">
+        {(seekPlan || seekBusy || seekError || seekNotice || seekPicks.length > 0) && <section className="seek-result">
           <div className="seek-result-head"><span>{seekMode === "online" ? "联网发现" : "本地寻诗"} · {seekRequest}</span>{seekBusy && <small>{seekMode === "online" ? "正在查询诗源并复核链接…" : "正在读懂需求并复核本地候选…"}</small>}</div>
           {seekPlan && <p>{seekPlan.interpretation}</p>}
+          {seekNotice && <p className="source-caution">{seekNotice}</p>}
           {seekMode === "online" && <p className="source-caution">点“在 Poema 阅读与赏析”可预览可辨认的正文并继续共读；无法可靠解析时会明确标作摘要。作者、版本与权利仍请在原站核对。</p>}
           {onlineWarnings.length > 0 && <p className="source-caution">部分诗源暂不可用：{onlineWarnings.join("；")}</p>}
           {seekError && <p className="chat-error">{seekError} <button onClick={() => setPage("settings")}>检查 AI 设置</button></p>}
@@ -314,6 +341,8 @@ export default function App() {
         <div className="results-grid">{results.slice(0, visibleLimit).map(p => <PoemCard key={p.id} poem={p} onOpen={() => openPoem(p)}/>)}</div>
         {results.length > visibleLimit && <button className="load-more" onClick={() => setVisibleLimit(n => n + 24)}>再看 24 篇 <ArrowRight size={16}/></button>}
         {!results.length && <div className="empty-state">暂时没有符合条件的作品。试着减少一个词，或换一种文体。</div>}
+        {/\p{Script=Han}/u.test(query) && <section className="outside-search"><div><span className="page-eyebrow">BEYOND THE SHELF</span><h2>本地之外，还有许多未曾相遇的文字。</h2><p>向诗泉扩展中文检索；结果不会自动加入本地诗库，只有打开阅读后才保存。</p></div><button className="outline-button" onClick={() => void searchOutside()} disabled={directOnlineBusy}>{directOnlineBusy ? "正在馆外寻找…" : "扩大到馆外"} <ArrowRight size={15}/></button></section>}
+        {directOnlineQuery && <section className="direct-online-results"><p>诗泉 ·「{directOnlineQuery}」{directOnlineItems.length ? ` · ${directOnlineItems.length} 篇馆外候选` : ""}</p>{directOnlineError && <div className="chat-error">{directOnlineError}</div>}{!directOnlineBusy && !directOnlineError && !directOnlineItems.length && <div className="empty-state">诗泉这次没有找到可阅读的候选；本地诗库仍可继续探索。</div>}{directOnlineItems.length > 0 && <div className="results-grid">{directOnlineItems.map(poem => <OnlinePoemCard key={poem.id} poem={poem} onPreview={() => void openOnlinePreview(poem)} loading={previewLoadingId === poem.id}/>)}</div>}</section>}
       </div>}
 
       {page === "notebook" && <div className="page-wrap">

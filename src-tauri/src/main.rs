@@ -74,11 +74,23 @@ async fn ai_chat(base_url: String, payload: Value) -> Result<String, String> {
 #[tauri::command]
 async fn search_public_source(source: String, term: String) -> Result<Value, String> {
     let term = term.trim();
-    if term.chars().count() > 80 || source != "wikisource" && source != "poetrydb" {
+    if term.chars().count() > 80 || !matches!(source.as_str(), "wikisource" | "poetrydb" | "poetryspring") {
         return Err("在线检索参数无效".into());
     }
     if source == "wikisource" && term.is_empty() { return Err("维基文库需要检索词".into()); }
-    let url = if source == "wikisource" {
+    let url = if source == "poetryspring" {
+        let mut url = if term.chars().count() >= 3 {
+            Url::parse("https://poetry.palemoky.com/api/search").map_err(|e| e.to_string())?
+        } else {
+            Url::parse("https://poetry.palemoky.com/api/poems/random").map_err(|e| e.to_string())?
+        };
+        if !term.is_empty() {
+            let key = if term.chars().count() >= 3 { "q" } else { "char" };
+            let value = if key == "q" { term } else { &term[..term.chars().next().unwrap().len_utf8()] };
+            url.query_pairs_mut().append_pair(key, value);
+        }
+        url
+    } else if source == "wikisource" {
         let mut url = Url::parse("https://zh.wikisource.org/w/api.php").map_err(|e| e.to_string())?;
         url.query_pairs_mut()
             .append_pair("action", "query").append_pair("list", "search")

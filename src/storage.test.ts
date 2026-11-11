@@ -40,4 +40,12 @@ describe("library migration and multi-device merge", () => {
     expect(mergeLibraries(excerpt, full).onlinePoems[base.id].lines).toHaveLength(2);
     expect(syncSnapshot(full).onlinePoems[base.id].title).toBe("夜雨寄北");
   });
+
+  it("retains cached Poetry Spring texts but rejects a forged source host", () => {
+    const id = "poetryspring:1234567890abcdef";
+    const poem = { id, title: "山中", author: "甲", era: "时代待核对", language: "zh", genre: "诗", form: "五言绝句", lines: ["山中有月", "夜里闻钟"], themes: [], mood: 3, sourceName: "诗泉", sourceUrl: "https://poetry.palemoky.com/api/poems/10", rights: { status: "source_unverified", basis: "未校勘" }, previewStatus: "full" };
+    const saved = normalizeLibrary({ onlinePoems: { [id]: poem } });
+    expect(syncSnapshot(saved).onlinePoems[id].lines).toHaveLength(2);
+    expect(normalizeLibrary({ onlinePoems: { [id]: { ...poem, sourceUrl: "https://attacker.example/poem" } } }).onlinePoems[id]).toBeUndefined();
+  });
 });

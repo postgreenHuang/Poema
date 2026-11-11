@@ -65,15 +65,15 @@ export async function seekPoems(args: { baseUrl: string; model: string; request:
   return { plan, picks: picks.length ? picks : candidates.slice(0, 6).map(poem => ({ id: poem.id, reason: "这篇作品与所述意象或心绪相近，值得从原文读起。" })), candidates };
 }
 
-export async function seekOnlinePoems(args: { baseUrl: string; model: string; request: string; onPlan?: (plan: FinderPlan) => void }) {
-  const { baseUrl, model, request, onPlan } = args;
+export async function seekOnlinePoems(args: { baseUrl: string; model: string; request: string; localPoems?: Poem[]; onPlan?: (plan: FinderPlan) => void }) {
+  const { baseUrl, model, request, localPoems = [], onPlan } = args;
   const plan = await interpretRequest(baseUrl, model, request);
   onPlan?.(plan);
-  const { items, warnings } = await searchOnlineSources(plan, request);
+  const { items, warnings } = await searchOnlineSources(plan, request, localPoems);
   if (!items.length) return { plan, items, picks: [] as FinderPick[], warnings };
   const candidates = items.map(item => `${item.id}｜${item.title}｜${item.author || "作者待来源页核对"}｜${item.sourceName}｜摘要:${item.excerpt}`).join("\n");
   const selectionAnswer = await complete(baseUrl, model, [
-    { role: "system", content: "你是谨慎的寻诗向导。候选来自实时诗歌来源，但中文候选可能只是搜索摘要，未核对作者、完整正文、版本或权利。只可从候选 ID 中选最多 6 项；不可编造诗句、作者、背景、版权或未展示的正文。优先相关且多样的作品。只输出 JSON：{\"picks\":[{\"id\":\"候选 ID\",\"reason\":\"根据题名或摘要写一句审慎的中文推荐理由\"}]}。" },
+    { role: "system", content: "你是谨慎的寻诗向导。候选来自实时诗歌来源，中文诗泉可能有完整正文，但这里只给了摘要；维基文库候选也可能只是搜索摘要。作者、时代、版本与权利都未独立核对。只可从候选 ID 中选最多 6 项；不可编造诗句、作者、背景、版权或未展示的正文。优先相关且多样的作品，尽量避开过熟名篇及重复作者。只输出 JSON：{\"picks\":[{\"id\":\"候选 ID\",\"reason\":\"根据题名或摘要写一句审慎的中文推荐理由\"}]}。" },
     { role: "user", content: `用户需求：${request}\n理解：${plan.interpretation}\n实时来源候选：\n${candidates}` },
   ]);
   let picks: FinderPick[] = [];

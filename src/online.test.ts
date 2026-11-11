@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { fromPoetryDB, fromWikisource, parseWikisourcePage } from "./online";
+import { describe, expect, it, vi } from "vitest";
+import { fromPoetryDB, fromPoetrySpring, fromWikisource, parseWikisourcePage, previewOnlinePoem, searchPoetrySpring } from "./online";
 
 describe("verified online poetry source parsing", () => {
   it("keeps only real Wikisource pages and strips search markup", () => {
@@ -26,5 +26,28 @@ describe("verified online poetry source parsing", () => {
     const parsed = parseWikisourcePage({ parse: { text: '<div id="headerContainer"><a href="/wiki/Author:%E6%9D%8E%E5%95%86%E9%9A%B1">李商隱</a></div><div class="poem"><p>君問歸期未有期<br />巴山夜雨漲秋池<sup class="reference">[1]</sup><br />何當共剪西窗燭<br />卻話巴山夜雨時</p></div><div class="licenseContainer">许可说明</div>' } });
     expect(parsed).toEqual({ author: "李商隱", lines: ["君問歸期未有期", "巴山夜雨漲秋池", "何當共剪西窗燭", "卻話巴山夜雨時"] });
     expect(parseWikisourcePage({ parse: { text: "<p>没有可辨认的正文</p>" } })).toBeNull();
+  });
+
+  it("parses full Poetry Spring poems with stable IDs and cautious metadata", async () => {
+    const row = { id: 319808, title: "贺新凉・贺新郎", content: ["可恨经年别。", "正安排、剖瓜植竹。"], author: { name: "李曾伯" }, dynasty: { name: "唐" }, type: { name: "宋词" } };
+    const [item] = fromPoetrySpring({ data: [row, { id: 2, title: "空篇", content: [], author: { name: "甲" } }] });
+    expect(item.id).toMatch(/^poetryspring:[0-9a-f]{16}$/);
+    expect(fromPoetrySpring({ data: { ...row, id: 999 } })[0].id).toBe(item.id);
+    expect(item.genre).toBe("词");
+    expect(item.sourceUrl).toBe("https://poetry.palemoky.com/api/poems/319808");
+    const { poem } = await previewOnlinePoem(item);
+    expect(poem.lines).toEqual(row.content);
+    expect(poem.previewStatus).toBe("full");
+    expect(poem.era).toBe("时代待核对");
+  });
+
+  it("uses a character-random clue for short searches and drops local duplicates", async () => {
+    const row = { id: 8, title: "山中", content: ["山中有月", "夜里闻钟"], author: { name: "甲" }, type: { name: "五言绝句" } };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: row }) } as Response);
+    try {
+      expect(await searchPoetrySpring("月")).toHaveLength(1);
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/poems/random?char="));
+      expect(await searchPoetrySpring("月", [{ title: "山中", author: "甲" } as never])).toHaveLength(0);
+    } finally { fetchMock.mockRestore(); }
   });
 });
