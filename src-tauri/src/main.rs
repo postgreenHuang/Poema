@@ -132,6 +132,25 @@ async fn read_wikisource_page(page_id: u64) -> Result<Value, String> {
 }
 
 #[tauri::command]
+async fn lookup_dictionary(term: String) -> Result<Option<Value>, String> {
+    let term = term.trim();
+    if term.is_empty() || term.chars().count() > 20 || !term.chars().all(|ch| ('\u{3400}'..='\u{9fff}').contains(&ch) || ch == '·' || ch == '・') {
+        return Err("仅支持查询 1–20 字的中文词语".into());
+    }
+    let mut url = Url::parse("https://www.moedict.tw/raw/").map_err(|e| e.to_string())?;
+    url.path_segments_mut().map_err(|_| "词典地址无效".to_string())?.push(&format!("{term}.json"));
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(12))
+        .user_agent("Poema/0.1 (https://github.com/postgreenHuang/Poema)")
+        .build().map_err(|e| e.to_string())?;
+    let response = client.get(url).send().await.map_err(|e| format!("词典连接失败：{e}"))?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND { return Ok(None); }
+    if !response.status().is_success() { return Err(format!("词典返回 {}", response.status())); }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.len() > 800_000 { return Err("词典词条过长".into()); }
+    serde_json::from_slice(&bytes).map(Some).map_err(|_| "词典响应无法解析".into())
+}
+
+#[tauri::command]
 fn open_external(url: String, app: tauri::AppHandle) -> Result<(), String> {
     let parsed = Url::parse(&url).map_err(|_| "来源链接无效".to_string())?;
     if parsed.scheme() != "https" || !parsed.username().is_empty() || parsed.password().is_some() {
@@ -203,7 +222,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, search_public_source, read_wikisource_page, open_external, read_sync_snapshots, write_sync_snapshot])
+        .invoke_handler(tauri::generate_handler![save_api_key, has_api_key, ai_chat, search_public_source, read_wikisource_page, lookup_dictionary, open_external, read_sync_snapshots, write_sync_snapshot])
         .run(tauri::generate_context!())
         .expect("Poema 启动失败");
 }

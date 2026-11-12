@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
 import { ArrowLeft, ArrowRight, Bookmark, BookOpen, Check, ChevronDown, Compass, Download, ExternalLink, Feather, MessageCircle, Moon, Search, Send, Settings, Shuffle, Sparkles, X } from "lucide-react";
 import { chat, hasKey, saveKey, isDesktop, lookupWord, openSource, seekPoems, seekOnlinePoems } from "./ai";
+import { lookupDictionary, type DictionaryEntry } from "./dictionary";
 import type { FinderPick, FinderPlan } from "./finder";
 import { previewOnlinePoem, randomPoetrySpring, searchPoetrySpring, type OnlinePoem } from "./online";
 import { chooseNext, genreLabels, genreOf, relatedPoems, searchPoems, themeLabels, type Genre, type Language, type Message, type PathKind, type Poem, type Theme } from "./domain";
@@ -82,6 +83,7 @@ export default function App() {
   const [lookupSelection, setLookupSelection] = useState("");
   const [lookupDraft, setLookupDraft] = useState("");
   const [lookupAnswer, setLookupAnswer] = useState("");
+  const [lookupEntry, setLookupEntry] = useState<DictionaryEntry | null>(null);
   const [lookupError, setLookupError] = useState("");
   const [lookupBusy, setLookupBusy] = useState(false);
   const [draft, setDraft] = useState("");
@@ -185,10 +187,27 @@ export default function App() {
   function openLookup() {
     const selected = window.getSelection()?.toString().trim() || lookupSelection;
     setLookupDraft(selected.length <= 60 ? selected : "");
-    setLookupAnswer(""); setLookupError(""); setLookupOpen(true);
+    setLookupAnswer(""); setLookupEntry(null); setLookupError(""); setLookupOpen(true);
   }
   async function runLookup() {
     if (!lookupDraft.trim() || lookupBusy) return;
+    setLookupBusy(true); setLookupAnswer(""); setLookupEntry(null); setLookupError("");
+    try {
+      const term = lookupDraft.trim();
+      let dictionaryIssue = "";
+      if (/^[\p{Script=Han}·・]+$/u.test(term)) {
+        try { const entry = await lookupDictionary(term); if (entry) { setLookupEntry(entry); return; } }
+        catch (error) { dictionaryIssue = `词典暂不可用：${String(error)}`; }
+      }
+      if (!keyReady) { setLookupError(dictionaryIssue || (/^[\p{Script=Han}·・]+$/u.test(term) ? "词典未收录这个词；可配置 AI 后尝试结合原句解读。" : "中文词可直接查词典；其他词语请先配置 AI。")); return; }
+      setLookupError(dictionaryIssue);
+      setLookupAnswer(await lookupWord({ baseUrl: library.aiBaseUrl, model: library.aiModel, poem: current, term, context: current.lines.find(line => line.includes(term)) }));
+    }
+    catch (error) { setLookupError(error instanceof Error ? error.message : String(error)); }
+    finally { setLookupBusy(false); }
+  }
+  async function runContextLookup() {
+    if (!keyReady || !lookupDraft.trim() || lookupBusy) return;
     setLookupBusy(true); setLookupAnswer(""); setLookupError("");
     try { setLookupAnswer(await lookupWord({ baseUrl: library.aiBaseUrl, model: library.aiModel, poem: current, term: lookupDraft, context: current.lines.find(line => line.includes(lookupDraft.trim())) })); }
     catch (error) { setLookupError(error instanceof Error ? error.message : String(error)); }
@@ -370,7 +389,7 @@ export default function App() {
       {page === "chat" && <div className="page-wrap poem-chat-page"><div className="page-eyebrow">A CONVERSATION ABOUT ONE TEXT</div><h1 className="page-title">与《{current.title}》共读</h1><p className="page-description">从一篇文字开始，可以慢慢读，也可以一直追问。</p><button className="chat-context" onClick={() => setPage("today")}><span><small>正在共读 · 点击回到原文</small><strong>{current.title}</strong><em>{current.author} · {current.era} · {current.form}</em></span><ArrowRight size={18}/></button>{isOnline && <p className="chat-source-notice">{current.previewStatus === "excerpt" ? "仅有来源摘要：以下赏析不能当作对全文的解读。" : "在线正文未经校勘：赏析仅依据此处展示的文本。"} <button onClick={() => void openSource(current.sourceUrl)}>核对原站 <ExternalLink size={12}/></button></p>}{selectedLine && <div className="selected-quote">「{selectedLine}」<button onClick={() => setSelectedLine(undefined)} title="取消选句"><X size={14}/></button></div>}<div className="chat-transcript">{messages.length === 0 && <div className="chat-welcome"><Feather size={27}/><h2>先让文字坐在这里。</h2><p>你可以从一个字、一种声音，或读完后的感觉开始。</p><div className="prompt-chips"><button onClick={() => void send("先不要讲背景，带我慢慢读这篇作品。")}>慢慢读</button><button onClick={() => void send("这篇作品的声音和节奏有什么特别？")}>听它的声音</button><button onClick={() => void send("能给出另一种不同的读法吗？")}>另一种读法</button></div></div>}{messages.map((message, index) => <div className={`chat-message ${message.role}`} key={message.id || index}><span>{message.role === "user" ? "我" : "POEMA · 共读者"}</span><p>{message.content}</p></div>)}{busy && <div className="thinking">Poema 正在细读…</div>}{error && <div className="chat-error">{error} <button onClick={() => setPage("settings")}>检查设置</button></div>}</div><div className="chat-compose"><textarea value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} placeholder="写下你想问的，Enter 发送…" rows={3}/><button disabled={busy || !draft.trim()} onClick={() => void send()} title="发送"><Send size={18}/></button></div><div className="note-compose"><span>只写给自己</span><div><input value={noteDraft} onChange={e => setNoteDraft(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveNote(); }} placeholder="记下此刻的一句话"/><button onClick={saveNote} disabled={!noteDraft.trim()}>留在诗笺</button></div></div></div>}
     </main>
 
-    {lookupOpen && <div className="modal-backdrop" onClick={() => setLookupOpen(false)}><section className="rights-modal lookup-modal" role="dialog" aria-modal="true" aria-label="查词与读音" onClick={event => event.stopPropagation()}><button className="modal-close" onClick={() => setLookupOpen(false)} title="关闭"><X size={18}/></button><div className="page-eyebrow">A WORD, A SOUND</div><h2>查词与读音</h2><p className="rights-author">选中诗中的字词，或在这里单独输入；结果不会写进共读对话。</p><div className="lookup-row"><input value={lookupDraft} onChange={event => { setLookupDraft(event.target.value); setLookupAnswer(""); setLookupError(""); }} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) void runLookup(); }} maxLength={60} placeholder={current.language === "zh" ? "例如：徘徊、霰、行" : "例如：wander, thou"} autoFocus/><button className="primary-soft" onClick={() => void runLookup()} disabled={lookupBusy || !lookupDraft.trim()}>{lookupBusy ? "正在查…" : "查读音与释义"}</button></div>{lookupError && <p className="lookup-error">{lookupError} {!keyReady && <button onClick={() => { setLookupOpen(false); setPage("settings"); }}>配置 AI</button>}</p>}{lookupAnswer && <div className="lookup-answer">{lookupAnswer}</div>}<p className="lookup-footnote">读音和释义由当前 AI 模型生成；多音字、古音和异文请结合可靠字典或原典核对。</p></section></div>}
+    {lookupOpen && <div className="modal-backdrop" onClick={() => setLookupOpen(false)}><section className="rights-modal lookup-modal" role="dialog" aria-modal="true" aria-label="查词与读音" onClick={event => event.stopPropagation()}><button className="modal-close" onClick={() => setLookupOpen(false)} title="关闭"><X size={18}/></button><div className="page-eyebrow">A WORD, A SOUND</div><h2>查词与读音</h2><p className="rights-author">选中诗中的字词，或直接输入；中文词优先查词典，不需要配置 AI。</p><div className="lookup-row"><input value={lookupDraft} onChange={event => { setLookupDraft(event.target.value); setLookupAnswer(""); setLookupEntry(null); setLookupError(""); }} onKeyDown={event => { if (event.key === "Enter" && !event.nativeEvent.isComposing) void runLookup(); }} maxLength={60} placeholder={current.language === "zh" ? "例如：徘徊、霰、行" : "例如：wander, thou"} autoFocus/><button className="primary-soft" onClick={() => void runLookup()} disabled={lookupBusy || !lookupDraft.trim()}>{lookupBusy ? "正在查…" : "查读音与释义"}</button></div>{lookupEntry && <div className="dictionary-result"><div className="dictionary-source">萌典 · 教育部《重编国语辞典修订本》 <button onClick={() => void openSource(lookupEntry.sourceUrl)}>核对词条 <ExternalLink size={12}/></button></div><h3>{lookupEntry.title}</h3>{lookupEntry.readings.map((reading, index) => <div className="dictionary-reading" key={index}><div className="dictionary-pronunciation"><strong>{reading.pinyin}</strong>{reading.bopomofo && <small>{reading.bopomofo}</small>}</div><ol>{reading.definitions.map((definition, definitionIndex) => <li key={definitionIndex}>{definition.type && <em>{definition.type}</em>}{definition.text}</li>)}</ol></div>)}{keyReady && <button className="text-button" onClick={() => void runContextLookup()} disabled={lookupBusy}>让 AI 结合当前诗句解读 <ArrowRight size={14}/></button>}</div>}{lookupError && <p className="lookup-error">{lookupError} {!keyReady && <button onClick={() => { setLookupOpen(false); setPage("settings"); }}>配置 AI</button>}</p>}{lookupAnswer && <div className="lookup-answer">{lookupAnswer}</div>}<p className="lookup-footnote">词典读音以现代国语为主；多音字、古音及诗中用法仍请结合原典核对。AI 补充会单独标示。</p></section></div>}
     {rightsOpen && <div className="modal-backdrop" onClick={() => setRightsOpen(false)}><section className="rights-modal" role="dialog" aria-modal="true" aria-label="版权与版本说明" onClick={e => e.stopPropagation()}><button className="modal-close" onClick={() => setRightsOpen(false)} title="关闭"><X size={18}/></button><div className="page-eyebrow">SOURCE & EDITION</div><h2>{current.title}</h2><p className="rights-author">{current.author} · {current.era}</p><dl><dt>文本来源</dt><dd>{current.sourceName}</dd><dt>权利与整理</dt><dd>{current.rights.basis}</dd><dt>校勘状态</dt><dd>{isOnline ? "在线来源预览，尚未人工校勘或核对权利" : current.quality === "imported" ? "公开语料导入，尚未逐首人工校勘" : "精选样本，仍需在正式发行前核对具体底本"}</dd>{current.rights.textCredit && <><dt>署名</dt><dd>{current.rights.textCredit}</dd></>}</dl><button className="primary-soft" onClick={() => openSource(current.sourceUrl)}>打开来源 <ExternalLink size={14}/></button></section></div>}
 
   </div>;
